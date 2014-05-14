@@ -551,7 +551,7 @@ var asteroids = (function(asteroids) {
 
 			// TODO: temporary (restart game with mouse click)
 			stage.onclick = function(ev) {
-				onStart();
+				location.reload();
 			}
 		}
 
