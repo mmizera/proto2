@@ -280,6 +280,8 @@ var asteroids = (function(asteroids) {
 			} 
 
 			self.points.move(self.velocity);
+
+			self.collide();
 		}
 
 		this.fire = function() {
@@ -325,6 +327,18 @@ var asteroids = (function(asteroids) {
 
 			if(vsize < -self.MAX_VELOCITY) {
 				self.velocity = VectorMath.multiply( VectorMath.normalize(self.velocity), -self.MAX_VELOCITY);
+			}
+		}
+
+		this.collide = function() {
+			var asteroids = this.world.getItemsByClass('asteroid');
+
+			for(var i in asteroids) {
+				if(Collisions.circleCollision(self, asteroids[i])) {
+					self.alive = false;
+					this.world.game.state = GameState.END;
+					break;
+				}
 			}
 		}
 	}
@@ -533,6 +547,12 @@ var asteroids = (function(asteroids) {
 
 		var onEnd = function() {
 			app.terminate();
+			app.world.debugText.values["game.state"] = "GAME OVER";
+
+			// TODO: temporary (restart game with mouse click)
+			stage.onclick = function(ev) {
+				onStart();
+			}
 		}
 
 		function getStage(w,h,bg) {
