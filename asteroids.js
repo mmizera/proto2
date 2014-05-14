@@ -402,7 +402,7 @@ var asteroids = (function(asteroids) {
 			for(var i in asteroids) {
 				if(Collisions.circleCollision(self, asteroids[i]) === CollisionType.INNER) {
 					self.alive = false;
-					asteroids[i].alive = false;
+					asteroids[i].hit();
 					break;	// one projectile destroy one asteroid
 				}
 			}
@@ -410,6 +410,10 @@ var asteroids = (function(asteroids) {
 	}
 
 	var Asteroid = asteroids.Asteroid = function(pivot, velocity, rotateAngleDeg, scale, nodes) {
+
+		var MINIMUM_SCALE = 0.20;
+
+		var MAX_HP = 8;
 
 		var self = this;
 
@@ -422,6 +426,9 @@ var asteroids = (function(asteroids) {
 		this.alive = true;
 
 		this.class = "asteroid";
+
+		this.hp = Math.round(scale*MAX_HP);
+		if(this.hp > MAX_HP) this.hp = MAX_HP;
 
 		var generatePoints = function(x,y,scale, nodes) {
 
@@ -456,6 +463,7 @@ var asteroids = (function(asteroids) {
 
 		this.draw = function(ctx) {
 			var p = points.getPoints();
+			var pivot = points.getPoint('pivot');
 			var first = true;
 			var firstPoint = [];
 			for(var i in pointsOrder) {
@@ -473,6 +481,25 @@ var asteroids = (function(asteroids) {
 
 			ctx.strokeStyle = "#fff";
 			ctx.stroke();
+
+			ctx.closePath();
+			ctx.save();
+
+			ctx.beginPath();
+			ctx.restore();
+
+			// life bar :)
+			
+			if(self.hp > 5) {
+				ctx.fillStyle = "#0f0";	
+			} else if(self.hp > 2) {
+				ctx.fillStyle = "#ff0";
+			} else {
+				ctx.fillStyle = "#f00";	
+			}
+			
+			ctx.rect(pivot[0], pivot[1], 5 * self.hp, 3);
+			ctx.fill();
 		}
 
 		this.update = function() {
@@ -481,6 +508,15 @@ var asteroids = (function(asteroids) {
 
 			if(self.world.isOffscreen(points.getPoint('pivot'), size + 50)) {	// TODO: fix 'bulgarian' constant :)
 				this.alive = false;
+			}
+		}
+
+		// asteroid was hit by something 
+		this.hit = function() {
+			--self.hp;
+
+			if(self.hp <= 0) {
+				self.alive = false;
 			}
 		}
 	}
@@ -514,7 +550,7 @@ var asteroids = (function(asteroids) {
 
 		var generateAsteroidsLock = 0;
 
-		var GENERATE_ASTEROIDS_RATE = 10000; // in milis
+		var GENERATE_ASTEROIDS_RATE = 500; // in milis
 
 		this.update = function() {
 			switch(self.state) {
@@ -539,14 +575,16 @@ var asteroids = (function(asteroids) {
 			var now = Date.now();
 
 			if(now > generateAsteroidsLock) {
-				app.world.addItems(generateAsteroids(stage, Math.randomInt(3, 10)));
+				app.world.addItem(generateAsteroid(stage));
 				generateAsteroidsLock = now + GENERATE_ASTEROIDS_RATE;
+
+				GENERATE_ASTEROIDS_RATE = Math.randomInt(500, 1000);
 			}
 
 		}
 
 		var onEnd = function() {
-			app.terminate();
+			// app.terminate();
 			app.world.debugText.values["game.state"] = "GAME OVER";
 
 			// TODO: temporary (restart game with mouse click)
