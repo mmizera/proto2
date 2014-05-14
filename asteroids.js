@@ -417,7 +417,7 @@ var asteroids = (function(asteroids) {
 
 		var self = this;
 
-		scale = scale || 1;
+		this.scale = scale || 1;
 
 		var pointsOrder = [];
 
@@ -517,6 +517,8 @@ var asteroids = (function(asteroids) {
 
 			if(self.hp <= 0) {
 				self.alive = false;
+				this.world.game.score += Math.round(self.scale * 10) * 10;
+				// this.world.game.score += 10;
 			}
 		}
 	}
@@ -536,6 +538,8 @@ var asteroids = (function(asteroids) {
 	GameState.END = 2;
 
 	var Game = asteroids.Game = function() {
+
+		this.score = 0;
 
 		var self = this;
 
@@ -560,6 +564,8 @@ var asteroids = (function(asteroids) {
 
 				default: throw "Invalid game state. [ state = '"+self.state+"']";
 			}
+
+			app.world.debugText.values['score']= this.score;
 		}
 
 		var onStart = function() {
@@ -569,6 +575,8 @@ var asteroids = (function(asteroids) {
 			self.state = GameState.IN_PROGRESS;
 
 			app.world.game = self;	// for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
+
+			this.score = 0;
 		}
 
 		var onProgress = function() {
@@ -738,8 +746,6 @@ var asteroids = (function(asteroids) {
 
 				if(items[i].update) items[i].update();
 			}
-
-			self.debugText.values["world.asteroids"] = Object.keys(self.getItemsByClass("asteroid")).length;
 		}
 
 		this.draw = function(ctx) {
