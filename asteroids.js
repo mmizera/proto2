@@ -355,11 +355,12 @@ var asteroids = (function(asteroids) {
 		this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
 
 		this.update = function() {
-			this.points.rotate(5);
-			this.points.move(velocity);
+			self.points.rotate(5);
+			self.points.move(velocity);
+			self.collide();
 
-			if(this.world.isOffscreen(this.points.getPoint("pivot"), self.width, self.height)) {
-				this.alive = false;
+			if(self.world.isOffscreen(self.points.getPoint("pivot"), self.width, self.height)) {
+				self.alive = false;
 			}
 		}
 
@@ -376,6 +377,21 @@ var asteroids = (function(asteroids) {
 
 			ctx.stroke();
 			
+		}
+
+		this.collide = function() {
+
+			var pivot = self.points.getPoint('pivot');
+			var radius = self.width > self.height ? self.width : self.height; // bigger is better
+
+			var asteroids = self.world.getItemsByClass("asteroid");
+			for(var i in asteroids) {
+				if(Collisions.circleCollision(self, asteroids[i]) === CollisionType.INNER) {
+					self.alive = false;
+					asteroids[i].alive = false;
+					break;	// one projectile destroy one asteroid
+				}
+			}
 		}
 	}
 
@@ -420,6 +436,8 @@ var asteroids = (function(asteroids) {
 
 		var points = generatePoints(pivot[0], pivot[1],scale, nodes);
 
+		this.points = points;	// TODO : this can get lil bit confusing ... points must be exposed due collision detection
+
 		var size = VectorMath.distance(points.getPoint('pivot'), points.getPoint('top')) * 2;
 
 		this.draw = function(ctx) {
@@ -463,9 +481,9 @@ var asteroids = (function(asteroids) {
 
 	var GameState = asteroids.GameState = function () {};
 
-	GameState.STATE_START = 0;
-	GameState.STATE_IN_PROGRESS = 1;
-	GameState.STATE_END = 2;
+	GameState.START = 0;
+	GameState.IN_PROGRESS = 1;
+	GameState.END = 2;
 
 	var Game = asteroids.Game = function() {
 
@@ -480,6 +498,10 @@ var asteroids = (function(asteroids) {
 
 		this.app = app;	// debug purpose only
 
+		var generateAsteroidsLock = 0;
+
+		var GENERATE_ASTEROIDS_RATE = 10000; // in milis
+
 		this.update = function() {
 			switch(self.state) {
 				case GameState.START : onStart();break;
@@ -492,19 +514,21 @@ var asteroids = (function(asteroids) {
 
 		var onStart = function() {
 			app.world.nuke();
-			// app.world.game = self;	// for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
 			app.world.addItem(new Ship(stage.width/2, stage.height/2));
 			app.animate();
-			this.state = GameState.IN_PROGRESS;
+			self.state = GameState.IN_PROGRESS;
 
-			// TODO: asteroids test , remove this later
-			app.stage.onclick = function(ev) {
-				app.world.addItem(generateAsteroid(app.stage));
-			}
+			app.world.game = self;	// for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
 		}
 
 		var onProgress = function() {
-			alert('here aj em');
+			var now = Date.now();
+
+			if(now > generateAsteroidsLock) {
+				app.world.addItems(generateAsteroids(stage, Math.randomInt(3, 10)));
+				generateAsteroidsLock = now + GENERATE_ASTEROIDS_RATE;
+			}
+
 		}
 
 		var onEnd = function() {
@@ -521,6 +545,16 @@ var asteroids = (function(asteroids) {
 			document.body.appendChild(stage);
 
 			return stage;
+		}
+
+		var generateAsteroids = function(stage, count) {
+			var asteroids = [];
+
+			for(var i = 0; i < count; i++) {
+				asteroids.push(generateAsteroid(stage));
+			}
+
+			return asteroids;
 		}
 
 		var generateAsteroid = function(stage) {
@@ -568,6 +602,8 @@ var asteroids = (function(asteroids) {
 
 		var idcounter = 0;
 
+		this.game = null;
+
 		document.body.onkeydown = function(ev) {
 			self.keyPressed[ev.keyCode] = true;
 		}
@@ -591,6 +627,12 @@ var asteroids = (function(asteroids) {
 
 		this.getItem = function(id) {
 			return items[id];
+		}
+
+		this.addItems = function(items) {
+			for(var i in items) {
+				self.addItem(items[i]);
+			}
 		}
 
 		this.addItem = function(obj, id) {
@@ -622,6 +664,10 @@ var asteroids = (function(asteroids) {
 		}
 
 		this.update = function() {
+
+			if(self.game && self.game.update) {
+				self.game.update();
+			}
 
 			var i;
 			
@@ -804,6 +850,10 @@ var asteroids = (function(asteroids) {
 			throw "Illegal 'Points' definition. Properties points.pivot and points.top must exists.";
 		}
 
+		this.getRadius = function() {
+			return VectorMath.distance(points.pivot, points.top);
+		}
+
 		this.add = function(point, id) {
 			id = id || "point_" + Object.keys(points).length;
 
@@ -883,6 +933,33 @@ var asteroids = (function(asteroids) {
 
 		}
 
+	}
+
+	var CollisionType = asteroids.CollisionType = function() {}
+
+	CollisionType.NONE = 0;
+	CollisionType.TOUCH = 1;
+	CollisionType.INNER = 2;
+
+	var Collisions = asteroids.Collisions = function() {}
+
+	asteroids.Collisions.circleCollision = function(obj1, obj2) {
+		if(!obj1.points) throw "obj1 does not expose points field.";
+		if(!obj2.points) throw "obj2 does not expose points field.";
+
+		var pivot1 = obj1.points.getPoint('pivot');
+		var pivot2 = obj2.points.getPoint('pivot');
+
+		var rad1 = obj1.points.getRadius();
+		var rad2 = obj2.points.getRadius();
+
+		var radSum = rad1 + rad2;
+		var distance = VectorMath.distance(pivot1, pivot2);
+
+		if(radSum > distance) return CollisionType.INNER;
+		if(radSum == distance) return CollisionType.TOUCH;
+		
+		return CollisionType.NONE;
 	}
 
 	return asteroids;
