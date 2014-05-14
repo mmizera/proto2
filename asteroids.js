@@ -592,10 +592,9 @@ var asteroids = (function(asteroids) {
 		}
 
 		var onEnd = function() {
-			// app.terminate();
 			app.world.debugText.values["game.state"] = "GAME OVER";
 
-			// TODO: temporary (restart game with mouse click)
+			// restart game with mouse click
 			stage.onclick = function(ev) {
 				location.reload();
 			}
