@@ -1,4 +1,3 @@
-
 //
 //	asteroids prototype 2 [ by Acko, 08.05.2014 ]
 //	
@@ -7,833 +6,987 @@
 // augment javascript
 
 Math.roundTo = function(num, to) {
-	to = to || 0;
-    return +(Math.round(num + ("e+" + to)) + ("e-" + to));	// nasty hack (mozzila does this xD https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round)
+    to = to || 0;
+    return +(Math.round(num + ("e+" + to)) + ("e-" + to)); // nasty hack (mozzila does this xD https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round)
 }
 
 Math.randomInt = function(low, high) {
-	low = low || 0;
-	high = high || 99999999;
+    low = low || 0;
+    high = high || 99999999;
 
-	if(low === high) throw "You must specify range, low can not equals high.";
+    if (low === high) throw "You must specify range, low can not equals high.";
 
-	return Math.floor( (Math.random() * (high-low+1)) + low );
+    return Math.floor((Math.random() * (high - low + 1)) + low);
 }
 
 Math.randomFloat = function(low, high, decimalPlaces) {
-	low = low || 0;
-	high = high || 99999999;
-	decimalPlaces = decimalPlaces || 2;
+    low = low || 0;
+    high = high || 99999999;
+    decimalPlaces = decimalPlaces || 2;
 
-	return Math.roundTo( (Math.random() * (high-low) + low), decimalPlaces );	
+    return Math.roundTo((Math.random() * (high - low) + low), decimalPlaces);
 }
 
 var asteroids = (function(asteroids) {
-	
-	var Key = asteroids.Key = function () {};
+
+    var Key = asteroids.Key = function() {};
     asteroids.Key.SPACE = 32;
     asteroids.Key.ARROW_LEFT = 37;
     asteroids.Key.ARROW_UP = 38;
     asteroids.Key.ARROW_RIGHT = 39;
     asteroids.Key.ARROW_DOWN = 40;
 
-	var Direction = asteroids.Direction = function() {}
-	asteroids.Direction.NORTH = [0, -1];
-	asteroids.Direction.SOUTH = [0, 1];
-	asteroids.Direction.WEST = [-1, 0];
-	asteroids.Direction.EAST = [1, 0];
-
-	asteroids.Arrow = function(x,y,scale) {
-
-		var self = this;
-
-		x = x || 0;
-
-		y = y || 0;
-
-		this.scale = scale || 1;
-
-		this.strokeStyle = "#f00";
-
-		this.world = null;
+    var Direction = asteroids.Direction = function() {}
+    asteroids.Direction.NORTH = [0, -1];
+    asteroids.Direction.SOUTH = [0, 1];
+    asteroids.Direction.WEST = [-1, 0];
+    asteroids.Direction.EAST = [1, 0];
 
-		this.id = "arrow";
-
-		this.velocity = [0,0];
-
-		this.ACCELERATION = 0.05;
-
-		this.MAX_VELOCITY = 7;
+    asteroids.Arrow = function(x, y, scale) {
 
-		var points = {
-			top : [ x,y-(self.scale*25) ],
+        var self = this;
 
-			topLeft : [ x-10,y-(self.scale*10) ],
-			topRight : [ x+10,y-(self.scale*10) ],
-
-			bottom : [ x,y+(self.scale*25) ],
+        x = x || 0;
 
-			pivot : [x,y]
-		};
-
-		this.width = VectorMath.distance(points.top, points.bottom);
+        y = y || 0;
 
-		this.height = VectorMath.distance(points.topLeft, points.topRight);
-
-		this.getDirection = function() {
-			return VectorMath.normalize(VectorMath.substract(points.top, points.pivot));
-		}
-
-		this.draw = function(ctx) {			
-			var p = points;
-			
-			ctx.moveTo(p.bottom[0], p.bottom[1]);	// bottom
-			ctx.lineTo(p.top[0], p.top[1]); // top
-			ctx.lineTo(p.topLeft[0], p.topLeft[1]); // topLeft
-			ctx.lineTo(p.topRight[0], p.topRight[1]); // topRight
-			ctx.lineTo(p.top[0], p.top[1]);	// top
-
-			ctx.strokeStyle = self.strokeStyle;
-			ctx.fillStyle = self.strokeStyle;
-			ctx.stroke();
-			ctx.fill();
-		}
-
-		this.rotate = function(angleDeg) {
-			if(!!!angleDeg) return;	// starting to think in javascript ... nah, I just put this here for funn xD
+        this.scale = scale || 1;
 
-			for(var i in points) {
-				if(i === "pivot") continue;
+        this.strokeStyle = "#f00";
 
-				points[i] = VectorMath.rotate(points[i], angleDeg, [points.pivot[0], points.pivot[1]]);
-			}
-		}
+        this.world = null;
 
-		this.move = function() {
-			if(self.velocity[0] === 0 && self.velocity[1] === 0) return;
+        this.id = "arrow";
 
-			var velocity = self.velocity;
-			var pivot = points.pivot;
-			var offscreen = this.world.isOffscreen(pivot, self.width, self.height);
-			
-			if(!!offscreen) {
-				this.world.debugText.values["Offscreen"] = "true";
+        this.velocity = [0, 0];
 
-				var stageW = app.stage.width;
-				var stageH = app.stage.height;
-				
-				if(VectorMath.equals(Direction.NORTH, offscreen)) 
-				{ 
-					self.moveTo(pivot[0], pivot[1]+stageW); 
-				} 
-				else if(VectorMath.equals(Direction.SOUTH, offscreen)) 
-				{ 
-					self.moveTo(pivot[0], pivot[1]-stageW); 
-				} 
-				else if(VectorMath.equals(Direction.WEST, offscreen)) 
-				{ 
-					self.moveTo(pivot[0]+stageH, pivot[1]); 
-				}
-				else if(VectorMath.equals(Direction.EAST, offscreen)) 
-				{ 
-					self.moveTo(pivot[0]-stageH, pivot[1]); 
-				} else 
-				{
-					self.moveTo(400,400);
-				}
-				
-			} else {
-				this.world.debugText.values["Offscreen"] = "false";
-			}
+        this.ACCELERATION = 0.05;
 
-			for(var i in points) {
-				points[i] = VectorMath.add(points[i], velocity);
-			}
-		}
+        this.MAX_VELOCITY = 7;
 
-		this.moveTo = function(x,y) {
-			if(VectorMath.equals(points.pivot, [x,y])) return;
+        var points = {
+            top: [x, y - (self.scale * 25)],
 
-			var moveTo = VectorMath.substract([x,y], points.pivot);
+            topLeft: [x - 10, y - (self.scale * 10)],
+            topRight: [x + 10, y - (self.scale * 10)],
 
-			for(var i in points) {
-				points[i] = VectorMath.add(points[i], moveTo);
-			}
-		}
+            bottom: [x, y + (self.scale * 25)],
 
-		this.accelerate = function() {
-			self.velocity = VectorMath.add(self.velocity, VectorMath.multiply(self.getDirection(), self.ACCELERATION));
+            pivot: [x, y]
+        };
 
-			// max velocity
-			var vsize = VectorMath.size(self.velocity);
+        this.width = VectorMath.distance(points.top, points.bottom);
 
-			if(vsize > self.MAX_VELOCITY) {
-				self.velocity = VectorMath.multiply( VectorMath.normalize(self.velocity), self.MAX_VELOCITY);
-			} 
+        this.height = VectorMath.distance(points.topLeft, points.topRight);
 
-			if(vsize < -self.MAX_VELOCITY) {
-				self.velocity = VectorMath.multiply( VectorMath.normalize(self.velocity), -self.MAX_VELOCITY);
-			}
-		}
+        this.getDirection = function() {
+            return VectorMath.normalize(VectorMath.substract(points.top, points.pivot));
+        }
 
-		this.update = function() {
-			// key binds
-			if( !!self.world.keyPressed[Key.ARROW_LEFT] ) self.rotate(-5);
-			if( !!self.world.keyPressed[Key.ARROW_RIGHT] ) self.rotate(+5);
-			if( !!self.world.keyPressed[Key.ARROW_UP] ) self.accelerate();
-			// update
-			this.move();
-		}
-	}
-	
-	var DebugText = asteroids.DebugText = function() {
-		var self = this;
+        this.draw = function(ctx) {
+            var p = points;
 
-		this.id = "debugText";
+            ctx.moveTo(p.bottom[0], p.bottom[1]); // bottom
+            ctx.lineTo(p.top[0], p.top[1]); // top
+            ctx.lineTo(p.topLeft[0], p.topLeft[1]); // topLeft
+            ctx.lineTo(p.topRight[0], p.topRight[1]); // topRight
+            ctx.lineTo(p.top[0], p.top[1]); // top
 
-		this.lineHeight = 12;
+            ctx.strokeStyle = self.strokeStyle;
+            ctx.fillStyle = self.strokeStyle;
+            ctx.stroke();
+            ctx.fill();
+        }
 
-		this.visible = true;
+        this.rotate = function(angleDeg) {
+            if ( !! !angleDeg) return; // starting to think in javascript ... nah, I just put this here for funn xD
 
-		this.values = {
+            for (var i in points) {
+                if (i === "pivot") continue;
 
-			toArray : function() {
+                points[i] = VectorMath.rotate(points[i], angleDeg, [points.pivot[0], points.pivot[1]]);
+            }
+        }
 
-				var self = this;
-				var ret = [];
+        this.move = function() {
+            if (self.velocity[0] === 0 && self.velocity[1] === 0) return;
 
-				for(var i in self) {
-					if(typeof self[i] === "function") continue;
+            var velocity = self.velocity;
+            var pivot = points.pivot;
+            var offscreen = this.world.isOffscreen(pivot, self.width, self.height);
 
-					ret.push(i + " : '"+self[i]+"'");
-				}
+            if ( !! offscreen) {
+                this.world.debugText.values["Offscreen"] = "true";
 
-				return ret;
-			}
-		};
+                var stageW = app.stage.width;
+                var stageH = app.stage.height;
 
-		this.draw = function(ctx) {
-			ctx.font = "12px monospace";
-			ctx.fillStyle = "#0f0";	
+                if (VectorMath.equals(Direction.NORTH, offscreen)) {
+                    self.moveTo(pivot[0], pivot[1] + stageW);
+                } else if (VectorMath.equals(Direction.SOUTH, offscreen)) {
+                    self.moveTo(pivot[0], pivot[1] - stageW);
+                } else if (VectorMath.equals(Direction.WEST, offscreen)) {
+                    self.moveTo(pivot[0] + stageH, pivot[1]);
+                } else if (VectorMath.equals(Direction.EAST, offscreen)) {
+                    self.moveTo(pivot[0] - stageH, pivot[1]);
+                } else {
+                    self.moveTo(400, 400);
+                }
 
-			var rows = self.values.toArray();
-			for(var i in rows) {
-				ctx.fillText(rows[i], 10, 10 + this.lineHeight * ((i*1)+1));
-			}
+            } else {
+                this.world.debugText.values["Offscreen"] = "false";
+            }
 
-			
-		}
+            for (var i in points) {
+                points[i] = VectorMath.add(points[i], velocity);
+            }
+        }
 
-	}
+        this.moveTo = function(x, y) {
+            if (VectorMath.equals(points.pivot, [x, y])) return;
 
-	var Ship = asteroids.Ship = function(x,y,scale) {
+            var moveTo = VectorMath.substract([x, y], points.pivot);
 
-		var self = this;
+            for (var i in points) {
+                points[i] = VectorMath.add(points[i], moveTo);
+            }
+        }
 
-		scale = scale || 1;
+        this.accelerate = function() {
+            self.velocity = VectorMath.add(self.velocity, VectorMath.multiply(self.getDirection(), self.ACCELERATION));
 
-		this.world = null;
+            // max velocity
+            var vsize = VectorMath.size(self.velocity);
 
-		this.velocity = [0,0];
+            if (vsize > self.MAX_VELOCITY) {
+                self.velocity = VectorMath.multiply(VectorMath.normalize(self.velocity), self.MAX_VELOCITY);
+            }
 
-		this.ACCELERATION = 0.05;
+            if (vsize < -self.MAX_VELOCITY) {
+                self.velocity = VectorMath.multiply(VectorMath.normalize(self.velocity), -self.MAX_VELOCITY);
+            }
+        }
 
-		this.MAX_VELOCITY = 7;
+        this.update = function() {
+            // key binds
+            if ( !! self.world.keyPressed[Key.ARROW_LEFT]) self.rotate(-5);
+            if ( !! self.world.keyPressed[Key.ARROW_RIGHT]) self.rotate(+5);
+            if ( !! self.world.keyPressed[Key.ARROW_UP]) self.accelerate();
+            // update
+            this.move();
+        }
+    }
 
-		var FIRE_RATE = 300; // 1 projectile per xxx milisec
+    var DebugText = asteroids.DebugText = function() {
+        var self = this;
 
-		var fireActionLock = 0;
+        this.id = "debugText";
 
-		this.id = "ship";
- 
-		this.points = new Points({
-			pivot : [ x, y ],
+        this.lineHeight = 12;
 
-			top : [ x, y - (10 * scale) ], 
-			left : [ x - (5 * scale), y + (10 * scale) ],
-			right : [ x + (5 * scale), y + (10 * scale) ],
+        this.visible = true;
 
-			bottom : [ x, y + (10 * scale) ]
-		});
+        this.values = {
 
-		this.width = VectorMath.distance(this.points.getPoint("top"), this.points.getPoint("bottom"));
+            toArray: function() {
 
-		this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
+                var self = this;
+                var ret = [];
 
-		this.update = function() {
- 			// key bindings
- 			if( !!self.world.keyPressed[Key.ARROW_LEFT] ) self.points.rotate(-5);
- 			if( !!self.world.keyPressed[Key.ARROW_RIGHT] ) self.points.rotate(+5);
- 			if( !!self.world.keyPressed[Key.ARROW_UP] ) self.accelerate();
- 			if( !!self.world.keyPressed[Key.SPACE] ) self.fire();
+                for (var i in self) {
+                    if (typeof self[i] === "function") continue;
 
- 			// actions
- 			self.move();
-		}
+                    ret.push(i + " : '" + self[i] + "'");
+                }
 
-		this.move = function() {
-			var w = self.world;
+                return ret;
+            }
+        };
 
-			var offscreen = w.isOffscreen(self.points.getPoint('pivot'), self.width, self.height);
-			if(offscreen) {
-				self.points.resetPositionInRectangle(offscreen, w.stage.width, w.stage.height);
-			} 
+        this.draw = function(ctx) {
+            ctx.font = "12px monospace";
+            ctx.fillStyle = "#0f0";
 
-			self.points.move(self.velocity);
+            var rows = self.values.toArray();
+            for (var i in rows) {
+                ctx.fillText(rows[i], 10, 10 + this.lineHeight * ((i * 1) + 1));
+            }
+        }
 
-			self.collide();
-		}
+    }
 
-		this.fire = function() {
-			var now = new Date().getTime();
+    var PerkType = asteroids.PerkType = function() {}
 
-			if(now < fireActionLock) return; // reloading or shit ...
+    PerkType.FIRE_RATE = 0; // enhance ship's cannon fire rate
+    PerkType.DOUBLE_DAMAGE = 1; // more damage, more funn
+    PerkType.MORE_CANNONS = 2; // fire in more directions ... after all, you are surrounded ;)
 
-			var pivot = VectorMath.add(self.points.getPoint("top"), VectorMath.multiply(self.points.getDirection(), 5));
-			
-			var velocity = VectorMath.multiply(self.points.getDirection(), self.MAX_VELOCITY + 0.5);
-			velocity = VectorMath.add(self.velocity, velocity);
+    var Perk = asteroids.Perk = function(x, y, type) {
 
-			this.world.addItem(new Projectile(pivot, velocity));
+        var self = this;
 
-			fireActionLock = ( now ) + FIRE_RATE;
-		}
+        var scale = 1;
 
-		this.draw = function(ctx) {
-			var p = self.points.getPoints();
+        this.class = "perk";
 
-			ctx.strokeStyle = "#fff";
-			ctx.fillStyle = "#fff";
+        this.type = type = type || Math.randomInt(0, Object.keys(PerkType).length - 1);
 
-			ctx.moveTo(p.top[0], p.top[1]);
-			ctx.lineTo(p.left[0], p.left[1]);
-			ctx.lineTo(p.pivot[0], p.pivot[1]);
-			ctx.lineTo(p.right[0], p.right[1]);
-			ctx.lineTo(p.top[0], p.top[1]);
+        this.points = new Points({
+            pivot: [x, y],
+            top: [x, y - 7 * scale],
+            left: [x - 4 * scale, y + 4 * scale],
+            right: [x + 4 * scale, y + 4 * scale]
+        });
 
-			ctx.stroke();
-			ctx.fill();
-		}
+        this.points2 = new Points({
+            pivot: [x, y],
+            top: [x, y + 7 * scale],
+            left: [x - 4 * scale, y - 4 * scale],
+            right: [x + 4 * scale, y - 4 * scale]
+        });
 
-		this.accelerate = function() {
-			self.velocity = VectorMath.add(self.velocity, VectorMath.multiply(self.points.getDirection(), self.ACCELERATION));
+        this.update = function() {
+            self.points.rotate(+3);
+            self.points2.rotate(-3);
+        }
 
-			// max velocity
-			var vsize = VectorMath.size(self.velocity);
+        this.draw = function(ctx) {
 
-			if(vsize > self.MAX_VELOCITY) {
-				self.velocity = VectorMath.multiply( VectorMath.normalize(self.velocity), self.MAX_VELOCITY);
-			} 
+            var p = self.points.getPoints();
+            var p2 = self.points2.getPoints();
 
-			if(vsize < -self.MAX_VELOCITY) {
-				self.velocity = VectorMath.multiply( VectorMath.normalize(self.velocity), -self.MAX_VELOCITY);
-			}
-		}
+            decorate(ctx);
 
-		this.collide = function() {
-			var asteroids = this.world.getItemsByClass('asteroid');
+            ctx.moveTo(p.top[0], p.top[1]);
 
-			for(var i in asteroids) {
-				if(Collisions.circleCollision(self, asteroids[i])) {
-					self.alive = false;
-					this.world.game.state = GameState.END;
-					break;
-				}
-			}
-		}
-	}
+            ctx.lineTo(p.left[0], p.left[1]);
+            ctx.lineTo(p.right[0], p.right[1]);
+            ctx.lineTo(p.top[0], p.top[1]);
 
-	var Projectile = asteroids.Projectile = function(pivot, velocity, scale) {
+            ctx.moveTo(p2.top[0], p2.top[1]);
 
-		var self = this;
+            ctx.lineTo(p2.left[0], p2.left[1]);
+            ctx.lineTo(p2.right[0], p2.right[1]);
+            ctx.lineTo(p2.top[0], p2.top[1]);
 
-		this.alive = true;
+            ctx.stroke();
+        }
 
-		scale = scale || 4;
- 
-		this.world = null;
+        var decorate = function(ctx) {
+            switch (type) {
+                case PerkType.FIRE_RATE:
+                    ctx.strokeStyle = "#ff0";
+                    break;
+                case PerkType.DOUBLE_DAMAGE:
+                    ctx.strokeStyle = "#0ff";
+                    break;
+                case PerkType.MORE_CANNONS:
+                    ctx.strokeStyle = "#f0f";
+                    break;
+            }
+        }
+    }
 
-		var x = pivot[0];
-		var y = pivot[1];
+    var Ship = asteroids.Ship = function(x, y, scale) {
 
-		this.points = new Points({
-			pivot : [x,y],
-			top : [ x, y+ (-1*scale) ],
-			bottom : [ x, y+(1*scale) ],
-			left :[ x+(-1*scale), y ],
-			right :[ x+(+1*scale), y ]
-		});
+        var self = this;
 
-		this.width = VectorMath.distance(this.points.getPoint("top"), this.points.getPoint("bottom"));
+        scale = scale || 1;
 
-		this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
+        this.world = null;
 
-		this.update = function() {
-			self.points.rotate(5);
-			self.points.move(velocity);
-			self.collide();
+        this.velocity = [0, 0];
 
-			if(self.world.isOffscreen(self.points.getPoint("pivot"), self.width, self.height)) {
-				self.alive = false;
-			}
-		}
+        this.ACCELERATION = 0.05;
 
-		this.draw = function(ctx) {
-			var p = this.points.getPoints();
+        this.MAX_VELOCITY = 7;
 
-			ctx.strokeStyle = "#f00";
-			
-			ctx.moveTo(p.top[0], p.top[1]);
-			ctx.lineTo(p.bottom[0], p.bottom[1]);
-			ctx.lineTo(p.left[0], p.left[1]);
-			ctx.lineTo(p.right[0], p.right[1]);
-			ctx.lineTo(p.top[0], p.top[1]);
+        var FIRE_RATE = 300; // 1 projectile per xxx milisec
 
-			ctx.stroke();
-			
-		}
+        var fireActionLock = 0;
 
-		this.collide = function() {
+        this.id = "ship";
 
-			var pivot = self.points.getPoint('pivot');
-			var radius = self.width > self.height ? self.width : self.height; // bigger is better
+        this.isImortal = false;
 
-			var asteroids = self.world.getItemsByClass("asteroid");
-			for(var i in asteroids) {
-				if(Collisions.circleCollision(self, asteroids[i]) === CollisionType.INNER) {
-					self.alive = false;
-					asteroids[i].hit();
-					break;	// one projectile destroy one asteroid
-				}
-			}
-		}
-	}
+        this.perksManagement = new PerksManagement();
 
-	var Asteroid = asteroids.Asteroid = function(pivot, velocity, rotateAngleDeg, scale, nodes) {
+        this.points = new Points({
+            pivot: [x, y],
 
-		var MINIMUM_SCALE = 0.20;
+            top: [x, y - (10 * scale)],
+            left: [x - (5 * scale), y + (10 * scale)],
+            right: [x + (5 * scale), y + (10 * scale)],
 
-		var MAX_HP = 8;
+            bottom: [x, y + (10 * scale)]
+        });
 
-		var self = this;
+        this.width = VectorMath.distance(this.points.getPoint("top"), this.points.getPoint("bottom"));
 
-		this.scale = scale || 1;
+        this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
 
-		var pointsOrder = [];
+        this.update = function() {
+            // key bindings
+            if ( !! self.world.keyPressed[Key.ARROW_LEFT]) self.points.rotate(-5);
+            if ( !! self.world.keyPressed[Key.ARROW_RIGHT]) self.points.rotate(+5);
+            if ( !! self.world.keyPressed[Key.ARROW_UP]) self.accelerate();
+            if ( !! self.world.keyPressed[Key.SPACE]) self.fire();
 
-		this.world = null;
+            // actions
+            self.move();
+        }
 
-		this.alive = true;
+        this.move = function() {
+            var w = self.world;
 
-		this.class = "asteroid";
+            var offscreen = w.isOffscreen(self.points.getPoint('pivot'), self.width, self.height);
+            if (offscreen) {
+                self.points.resetPositionInRectangle(offscreen, w.stage.width, w.stage.height);
+            }
 
-		this.hp = Math.round(scale*MAX_HP);
-		if(this.hp > MAX_HP) this.hp = MAX_HP;
+            self.points.move(self.velocity);
 
-		var generatePoints = function(x,y,scale, nodes) {
+            self.collide();
+        }
 
-			nodes = nodes || Math.randomInt(5, 9);
+        this.fire = function() {
+            var now = new Date().getTime();
 
-			var point = VectorMath.add([x,y], VectorMath.multiply( Direction.NORTH, (Math.randomInt(20, 80) * scale) ) );
+            if (now < fireActionLock) return; // reloading or shit ...
 
-			var points = new Points({
-				pivot : [x,y],
-				top : point
-			});
+            var pivot = VectorMath.add(self.points.getPoint("top"), VectorMath.multiply(self.points.getDirection(), 5));
 
-			var angleArea = 360 / nodes;
+            var velocity = VectorMath.multiply(self.points.getDirection(), self.MAX_VELOCITY + 0.5);
+            velocity = VectorMath.add(self.velocity, velocity);
 
-			for(var i = 0; i < nodes; i++) {
-				var angleDeg = Math.randomInt(i*angleArea, (i+1)*angleArea);
-				
-				point = VectorMath.rotate(points.getPoint('top'), angleDeg, [x,y]);
+            var doubleDamage = self.perksManagement.isActive(PerkType.DOUBLE_DAMAGE);
 
-				points.add(point, "point_" + i);
-				pointsOrder.push("point_" + i);
-			}
+            self.world.addItem(new Projectile(pivot, velocity, null, doubleDamage));
 
-			return points;
-		}
+            if (self.perksManagement.isActive(PerkType.MORE_CANNONS)) {
+                var cannonsLevel = self.perksManagement.getPerkMagnitude(PerkType.MORE_CANNONS);
 
-		var points = generatePoints(pivot[0], pivot[1],scale, nodes);
+                //if(cannonsLevel === 1) {
+                self.world.addItem(new Projectile(pivot, VectorMath.rotate(velocity, 180), null, doubleDamage));
+                // }
+            }
 
-		this.points = points;	// TODO : this can get lil bit confusing ... points must be exposed due collision detection
+            var currentFireRate = FIRE_RATE
+            if (self.perksManagement.isActive(PerkType.FIRE_RATE)) {
+                var magnitude = self.perksManagement.getPerkMagnitude(PerkType.FIRE_RATE);
 
-		var size = VectorMath.distance(points.getPoint('pivot'), points.getPoint('top')) * 2;
+                currentFireRate -= (magnitude * 100);
+                if (currentFireRate < 5) currentFireRate = 5;
+            }
 
-		this.draw = function(ctx) {
-			var p = points.getPoints();
-			var pivot = points.getPoint('pivot');
-			var first = true;
-			var firstPoint = [];
-			for(var i in pointsOrder) {
-				if(i === 'pivot') continue;
+            fireActionLock = (now) + currentFireRate;
+        }
 
-				if(first) {
-					ctx.moveTo(p[ pointsOrder[i] ][0], p[ pointsOrder[i] ][1]);
-					firstPoint = [ p[ pointsOrder[i] ][0], p[ pointsOrder[i] ][1] ];
-					first = false;
-				} else {
-					ctx.lineTo(p[ pointsOrder[i] ][0], p[ pointsOrder[i] ][1]);
-				}
-			}	
-			ctx.lineTo(firstPoint[0], firstPoint[1]);
+        this.draw = function(ctx) {
+            var p = self.points.getPoints();
 
-			ctx.strokeStyle = "#fff";
-			ctx.stroke();
+            ctx.strokeStyle = "#fff";
+            ctx.fillStyle = "#fff";
 
-			ctx.closePath();
-			ctx.save();
+            ctx.moveTo(p.top[0], p.top[1]);
+            ctx.lineTo(p.left[0], p.left[1]);
+            ctx.lineTo(p.pivot[0], p.pivot[1]);
+            ctx.lineTo(p.right[0], p.right[1]);
+            ctx.lineTo(p.top[0], p.top[1]);
 
-			ctx.beginPath();
-			ctx.restore();
+            ctx.stroke();
+            ctx.fill();
+        }
 
-			// life bar :)
-			
-			if(self.hp > 5) {
-				ctx.fillStyle = "#0f0";	
-			} else if(self.hp > 2) {
-				ctx.fillStyle = "#ff0";
-			} else {
-				ctx.fillStyle = "#f00";	
-			}
-			
-			ctx.rect(pivot[0], pivot[1], 5 * self.hp, 3);
-			ctx.fill();
-		}
+        this.accelerate = function() {
+            self.velocity = VectorMath.add(self.velocity, VectorMath.multiply(self.points.getDirection(), self.ACCELERATION));
 
-		this.update = function() {
-			points.rotate(rotateAngleDeg);
-			points.move(velocity);
+            // max velocity
+            var vsize = VectorMath.size(self.velocity);
 
-			if(self.world.isOffscreen(points.getPoint('pivot'), size + 50)) {	// TODO: fix 'bulgarian' constant :)
-				this.alive = false;
-			}
-		}
+            if (vsize > self.MAX_VELOCITY) {
+                self.velocity = VectorMath.multiply(VectorMath.normalize(self.velocity), self.MAX_VELOCITY);
+            }
 
-		// asteroid was hit by something 
-		this.hit = function() {
-			--self.hp;
+            if (vsize < -self.MAX_VELOCITY) {
+                self.velocity = VectorMath.multiply(VectorMath.normalize(self.velocity), -self.MAX_VELOCITY);
+            }
+        }
 
-			if(self.hp <= 0) {
-				self.alive = false;
-				this.world.game.score += Math.round(self.scale * 10) * 10;
-				// this.world.game.score += 10;
-			}
-		}
-	}
+        this.collide = function() {
+            // for debug purposes (or for some cheating bastards ...)
+            if (self.isImortal) {
+                return;
+            }
 
-	var Circle = asteroids.Circle = function(pivot, radius) {
-		this.draw = function(ctx) {
-			ctx.strokeStyle = "#fff";
-			ctx.arc(pivot[0], pivot[1], radius, Angle.toRad(0), Angle.toRad(360));
-			ctx.stroke();
-		}
-	}
+            var asteroids = this.world.getItemsByClass('asteroid');
 
-	var GameState = asteroids.GameState = function () {};
+            for (var i in asteroids) {
+                if (Collisions.circleCollision(self, asteroids[i])) {
+                    self.alive = false;
+                    this.world.game.state = GameState.END;
+                    break;
+                }
+            }
+        }
+    }
 
-	GameState.START = 0;
-	GameState.IN_PROGRESS = 1;
-	GameState.END = 2;
+    var Projectile = asteroids.Projectile = function(pivot, velocity, scale, doubleDamage) {
 
-	var Game = asteroids.Game = function() {
+        var self = this;
 
-		this.score = 0;
+        this.alive = true;
 
-		var self = this;
+        scale = scale || 4;
 
-		this.state = GameState.START;
+        this.world = null;
 
-		// init
-		var stage = getStage(800,800);
+        var x = pivot[0];
+        var y = pivot[1];
 
-		var app = new App(stage);
+        doubleDamage = doubleDamage || false;
 
-		this.app = app;	// debug purpose only
+        this.points = new Points({
+            pivot: [x, y],
+            top: [x, y + (-1 * scale)],
+            bottom: [x, y + (1 * scale)],
+            left: [x + (-1 * scale), y],
+            right: [x + (+1 * scale), y]
+        });
 
-		var generateAsteroidsLock = 0;
+        this.width = VectorMath.distance(this.points.getPoint("top"), this.points.getPoint("bottom"));
 
-		var GENERATE_ASTEROIDS_RATE = 500; // in milis
+        this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
 
-		this.update = function() {
-			switch(self.state) {
-				case GameState.START : onStart();break;
-				case GameState.IN_PROGRESS : onProgress();break;
-				case GameState.END : onEnd();break;
+        this.update = function() {
+            self.points.rotate(5);
+            self.points.move(velocity);
+            self.collide();
 
-				default: throw "Invalid game state. [ state = '"+self.state+"']";
-			}
+            if (self.world.isOffscreen(self.points.getPoint("pivot"), self.width, self.height)) {
+                self.alive = false;
+            }
+        }
 
-			app.world.debugText.values['score']= this.score;
-		}
+        this.draw = function(ctx) {
+            var p = this.points.getPoints();
 
-		var onStart = function() {
-			app.world.nuke();
-			app.world.addItem(new Ship(stage.width/2, stage.height/2));
-			app.animate();
-			self.state = GameState.IN_PROGRESS;
+            ctx.strokeStyle = "#f00";
 
-			app.world.game = self;	// for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
+            ctx.moveTo(p.top[0], p.top[1]);
+            ctx.lineTo(p.bottom[0], p.bottom[1]);
+            ctx.lineTo(p.left[0], p.left[1]);
+            ctx.lineTo(p.right[0], p.right[1]);
+            ctx.lineTo(p.top[0], p.top[1]);
 
-			this.score = 0;
-		}
+            ctx.stroke();
 
-		var onProgress = function() {
-			var now = Date.now();
+        }
 
-			if(now > generateAsteroidsLock) {
-				app.world.addItem(generateAsteroid(stage));
-				generateAsteroidsLock = now + GENERATE_ASTEROIDS_RATE;
+        this.collide = function() {
 
-				GENERATE_ASTEROIDS_RATE = Math.randomInt(500, 1000);
-			}
+            var pivot = self.points.getPoint('pivot');
+            var radius = self.width > self.height ? self.width : self.height; // bigger is better
 
-		}
+            var asteroids = self.world.getItemsByClass("asteroid");
+            for (var i in asteroids) {
+                if (Collisions.circleCollision(self, asteroids[i]) === CollisionType.INNER) {
+                    self.alive = false;
 
-		var onEnd = function() {
-			app.world.debugText.values["game.state"] = "GAME OVER";
+                    asteroids[i].hit();
+                    if (doubleDamage) {
+                        asteroids[i].hit();
+                    }
 
-			// restart game with mouse click
-			stage.onclick = function(ev) {
-				location.reload();
-			}
-		}
+                    break;
+                }
+            }
 
-		function getStage(w,h,bg) {
-			var stage = document.createElement("canvas");
-			stage.width = w || 800;
-			stage.height = h || 800;
-			stage.id = "stage";
-			stage.style.background = bg || "#000";
+            var perks = self.world.getItemsByClass("perk");
+            for (var i in perks) {
+                if (Collisions.circleCollision(self, perks[i]) === CollisionType.INNER) {
+                    perks[i].alive = false;
+                    self.world.getItem('ship').perksManagement.addPerk(perks[i].type);
+                    break;
+                }
+            }
+        }
+    }
 
-			document.body.appendChild(stage);
+    var Asteroid = asteroids.Asteroid = function(pivot, velocity, rotateAngleDeg, scale, nodes) {
 
-			return stage;
-		}
+        var MINIMUM_SCALE = 0.20;
 
-		var generateAsteroids = function(stage, count) {
-			var asteroids = [];
+        var MAX_HP = 8;
 
-			for(var i = 0; i < count; i++) {
-				asteroids.push(generateAsteroid(stage));
-			}
+        var self = this;
 
-			return asteroids;
-		}
+        this.scale = scale || 1;
 
-		var generateAsteroid = function(stage) {
+        var pointsOrder = [];
 
-			var sW = stage.width;
-			var sH = stage.height;
+        this.world = null;
 
-			var targetPoint = [ Math.randomInt(sW/2 - Math.round(sW*0.2), sW/2 + Math.round(sW*0.2)), Math.randomInt(sH/2 - Math.round(sH*0.2), sH/2 + Math.round(sH*0.2)) ];
-			var pointOfOrigin = [ Math.randomInt(0,sW), Math.randomInt(0,sH) ];
+        this.alive = true;
 
-			// start from edge
-			switch(Math.randomInt(0,3)) {
-				case 0 : pointOfOrigin = [ -50, pointOfOrigin[1] ];break;
-				case 1 : pointOfOrigin = [ sW+50, pointOfOrigin[1] ];break;
-				case 2 : pointOfOrigin = [ pointOfOrigin[0], -50 ];break;
-				case 3 : pointOfOrigin = [ pointOfOrigin[0], sH+50 ];break;
-			}
+        this.class = "asteroid";
 
-			var velocitySize = Math.randomFloat(0.20, 2, 2);
-			var velocity = VectorMath.multiply(VectorMath.normalize(VectorMath.substract(targetPoint, pointOfOrigin)), velocitySize);
+        this.hp = Math.round(scale * MAX_HP);
+        if (this.hp > MAX_HP) this.hp = MAX_HP;
 
-			var scale = Math.randomFloat(0.20,1, 2);
+        var generatePoints = function(x, y, scale, nodes) {
 
-			var rotateAngleDeg = Math.randomFloat(-0.50, 0.50, 2);
+            nodes = nodes || Math.randomInt(5, 9);
 
-			return new Asteroid(pointOfOrigin, velocity, rotateAngleDeg, scale);
-		}
+            var point = VectorMath.add([x, y], VectorMath.multiply(Direction.NORTH, (Math.randomInt(20, 80) * scale)));
 
-		onStart();
-	}
+            var points = new Points({
+                pivot: [x, y],
+                top: point
+            });
 
-	var World = asteroids.World = function(stage) {
+            var angleArea = 360 / nodes;
 
-		var self = this;
+            for (var i = 0; i < nodes; i++) {
+                var angleDeg = Math.randomInt(i * angleArea, (i + 1) * angleArea);
 
-		this.debugText = new DebugText();
+                point = VectorMath.rotate(points.getPoint('top'), angleDeg, [x, y]);
 
-		var items = {};
+                points.add(point, "point_" + i);
+                pointsOrder.push("point_" + i);
+            }
 
-		var itemsByClass = {};
+            return points;
+        }
 
-		this.stage = stage;
+        var points = generatePoints(pivot[0], pivot[1], scale, nodes);
 
-		this.keyPressed = [];
+        this.points = points; // TODO : this can get lil bit confusing ... points must be exposed due collision detection
 
-		var idcounter = 0;
+        var size = VectorMath.distance(points.getPoint('pivot'), points.getPoint('top')) * 2;
 
-		this.game = null;
+        this.draw = function(ctx) {
+            var p = points.getPoints();
+            var pivot = points.getPoint('pivot');
+            var first = true;
+            var firstPoint = [];
+            for (var i in pointsOrder) {
+                if (i === 'pivot') continue;
 
-		document.body.onkeydown = function(ev) {
-			self.keyPressed[ev.keyCode] = true;
-		}
+                if (first) {
+                    ctx.moveTo(p[pointsOrder[i]][0], p[pointsOrder[i]][1]);
+                    firstPoint = [p[pointsOrder[i]][0], p[pointsOrder[i]][1]];
+                    first = false;
+                } else {
+                    ctx.lineTo(p[pointsOrder[i]][0], p[pointsOrder[i]][1]);
+                }
+            }
+            ctx.lineTo(firstPoint[0], firstPoint[1]);
 
-		document.body.onkeyup = function(ev) {
-			self.keyPressed[ev.keyCode] = false;	
-		}
+            ctx.strokeStyle = "#fff";
+            ctx.stroke();
 
-		this.nuke = function() {
-			items = {};
-			self.addItem(this.debugText, "debugText"); // this must be always present for obvious reasons
-		}
+            ctx.closePath();
+            ctx.save();
 
-		this.getItems = function() {
-			return items;
-		}
+            ctx.beginPath();
+            ctx.restore();
 
-		this.getItemsByClass = function(className) {
-			return itemsByClass[className]? itemsByClass[className] : {};
-		}
+            // life bar :)
 
-		this.getItem = function(id) {
-			return items[id];
-		}
+            if (self.hp > 5) {
+                ctx.fillStyle = "#0f0";
+            } else if (self.hp > 2) {
+                ctx.fillStyle = "#ff0";
+            } else {
+                ctx.fillStyle = "#f00";
+            }
 
-		this.addItems = function(items) {
-			for(var i in items) {
-				self.addItem(items[i]);
-			}
-		}
+            ctx.rect(pivot[0], pivot[1], 5 * self.hp, 3);
+            ctx.fill();
+        }
 
-		this.addItem = function(obj, id) {
-			if(!id) {
-				if(obj.id) {
-					id = obj.id;
-				} else {
-					id = "undefined_" + (++idcounter);	// generate id	
-				}
-			}
+        this.update = function() {
+            points.rotate(rotateAngleDeg);
+            points.move(velocity);
 
-			obj.id = id;
+            if (self.world.isOffscreen(points.getPoint('pivot'), size + 50)) { // TODO: fix 'bulgarian' constant :)
+                this.alive = false;
+            }
+        }
 
-			if(!obj.class) {
-				obj.class = obj.constructor.name.toLowerCase() || "unknown";
-			}
-			
-			if(obj.hasOwnProperty("alive")) obj.alive = true;
+        // asteroid was hit by something 
+        this.hit = function() {
+            --self.hp;
 
-			if(obj.hasOwnProperty("world")) obj.world = self;	// inject world instance if requested
+            if (self.hp <= 0) {
+                self.alive = false;
+                this.world.game.score += Math.round(self.scale * 10) * 10;
+                // this.world.game.score += 10;
+            }
+        }
+    }
 
-			items[obj.id] = obj;
+    var PerksManagement = asteroids.PerksManagement = function() {
 
-			if(!itemsByClass[obj.class]) {
-				itemsByClass[obj.class] = {};
-			}
+        var self = this;
 
-			itemsByClass[obj.class][obj.id] = obj;
-		}
+        // one perk duration in sec.
+        var perkDurations = {};
+        perkDurations[PerkType.FIRE_RATE] = 15;
+        perkDurations[PerkType.DOUBLE_DAMAGE] = 15;
+        perkDurations[PerkType.MORE_CANNONS] = 15;
 
-		this.update = function() {
+        // perks validity
+        var validUntil = {};
+        validUntil[PerkType.FIRE_RATE] = 15;
+        validUntil[PerkType.DOUBLE_DAMAGE] = 15;
+        validUntil[PerkType.MORE_CANNONS] = 15;
 
-			if(self.game && self.game.update) {
-				self.game.update();
-			}
+        this.addPerk = function(perkType) {
+            if (typeof perkType !== "number") return;
 
-			var i;
-			
-			for(i in items) {				
-				if(items[i].hasOwnProperty("alive") && !items[i].alive) {
-					delete itemsByClass[items[i].class][i];
-					delete items[i];
-					continue;
-				}
+            validUntil[perkType] += (perkDurations[perkType] * 1000) + (self.isActive(perkType) ? 0 : Date.now());
+        }
 
-				if(items[i].update) items[i].update();
-			}
-		}
+        this.isActive = function(perkType) {
+            if (typeof perkType !== "number") return;
 
-		this.draw = function(ctx) {
-			var i;
+            return Date.now() < validUntil[perkType];
+        }
 
-			ctx.clearRect(0,0,self.stage.width, self.stage.height);
+        this.getPerkMagnitude = function(perkType) {
+            var diff = Math.round((validUntil[perkType] - Date.now()) / 1000); // diff in sec
 
-			for(i in items) {
+            if (diff <= 0) return 0;
 
-				if(items[i].visible === false) continue;
+            return Math.round(diff / perkDurations[perkType]);
+        }
 
-				ctx.save();
-				ctx.beginPath();
+    }
 
-				items[i].draw(ctx);
+    var GameState = asteroids.GameState = function() {};
 
-				ctx.closePath();
-				ctx.restore();
-			}
-		}
+    GameState.START = 0;
+    GameState.IN_PROGRESS = 1;
+    GameState.END = 2;
 
-		this.isOffscreen = function(pivot, w, h) {
-			var x = pivot[0];
-			var y = pivot[1];
+    var Game = asteroids.Game = function() {
 
-			h = h || w;
+        this.score = 0;
 
-			var margin = w > h ? w : h;
+        var self = this;
 
-			var stageW = self.stage.width;
-			var stageH = self.stage.height;
+        this.state = GameState.START;
 
-			if( x < -margin ) return Direction.WEST;
-			if( y < -margin ) return Direction.NORTH;
-			if( x > stageW + margin ) return Direction.EAST;
-			if( y > stageH + margin ) return Direction.SOUTH;
+        // init
+        var stage = getStage(document.body.clientWidth, document.body.clientHeight);
 
-			return false;
-		}
+        var app = new App(stage);
 
+        this.app = app; // debug purpose only
 
-		self.addItem(this.debugText, "debugText");
-	}	
+        var generateAsteroidsLock = 0;
 
-	var App = asteroids.App = function(stage) {
+        var GENERATE_ASTEROIDS_RATE = 500; // in milis
 
-		var self = this; // dzavaskript, you fuck !
+        this.update = function() {
+            switch (self.state) {
+                case GameState.START:
+                    onStart();
+                    break;
+                case GameState.IN_PROGRESS:
+                    onProgress();
+                    break;
+                case GameState.END:
+                    onEnd();
+                    break;
 
-		var animationId = null;
+                default:
+                    throw "Invalid game state. [ state = '" + self.state + "']";
+            }
 
-		this.stage = stage;
+            app.world.debugText.values['score'] = this.score;
+        }
 
-		this.ctx = stage.getContext("2d");
+        var onStart = function() {
+            app.world.nuke();
+            app.world.addItem(new Ship(stage.width / 2, stage.height / 2));
+            app.animate();
+            self.state = GameState.IN_PROGRESS;
 
-		this.world = new World(stage);
+            app.world.game = self; // for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
 
-		var getAnimationFrame = (function() {
-	        return window.requestAnimationFrame ||
-	            window.webkitRequestAnimationFrame ||
-	            window.mozRequestAnimationFrame ||
-	            window.oRequestAnimationFrame ||
-	            window.msRequestAnimationFrame ||
-	            function( /* function */ callback, /* DOMElement */ element) {
-	                window.setTimeout(callback, 1000 / 60);
-	        };
-	    })();
+            this.score = 0;
+        }
 
-	    this.animate = function() {
-			try {
-				animationId = getAnimationFrame(self.animate);
+        var onProgress = function() {
+            var now = Date.now();
 
-				self.world.update();
-				self.world.draw(self.ctx);
+            if (now > generateAsteroidsLock) {
+                app.world.addItem(generateAsteroid(stage));
+                generateAsteroidsLock = now + GENERATE_ASTEROIDS_RATE;
 
-			} catch(e) {
-				alert(e);
-				console.log(e);
-				self.terminate();
-			}
-	    }
+                GENERATE_ASTEROIDS_RATE = Math.randomInt(500, 1000);
+            }
 
-	    this.terminate = function() {
-	    	window.cancelAnimationFrame(animationId);
-	        animationId = null;
-	    }
+            stage.onclick = function(ev) {
+                app.world.addItem(new Perk(ev.clientX, ev.clientY));
+            }
 
-	}
+        }
 
-	var Angle = asteroids.Angle = function() {}
+        var onEnd = function() {
+            app.world.debugText.values["game.state"] = "GAME OVER";
+
+            // restart game with mouse click
+            stage.onclick = function(ev) {
+                location.reload();
+            }
+        }
+
+            function getStage(w, h, bg) {
+                var stage = document.createElement("canvas");
+                stage.width = w || 800;
+                stage.height = h || 800;
+                stage.id = "stage";
+                stage.style.background = bg || "#000";
+
+                document.body.appendChild(stage);
+
+                return stage;
+            }
+
+        var generateAsteroids = function(stage, count) {
+            var asteroids = [];
+
+            for (var i = 0; i < count; i++) {
+                asteroids.push(generateAsteroid(stage));
+            }
+
+            return asteroids;
+        }
+
+        var generateAsteroid = function(stage) {
+
+            var sW = stage.width;
+            var sH = stage.height;
+
+            var targetPoint = [Math.randomInt(sW / 2 - Math.round(sW * 0.2), sW / 2 + Math.round(sW * 0.2)), Math.randomInt(sH / 2 - Math.round(sH * 0.2), sH / 2 + Math.round(sH * 0.2))];
+            var pointOfOrigin = [Math.randomInt(0, sW), Math.randomInt(0, sH)];
+
+            // start from edge
+            switch (Math.randomInt(0, 3)) {
+                case 0:
+                    pointOfOrigin = [-50, pointOfOrigin[1]];
+                    break;
+                case 1:
+                    pointOfOrigin = [sW + 50, pointOfOrigin[1]];
+                    break;
+                case 2:
+                    pointOfOrigin = [pointOfOrigin[0], -50];
+                    break;
+                case 3:
+                    pointOfOrigin = [pointOfOrigin[0], sH + 50];
+                    break;
+            }
+
+            var velocitySize = Math.randomFloat(0.20, 2, 2);
+            var velocity = VectorMath.multiply(VectorMath.normalize(VectorMath.substract(targetPoint, pointOfOrigin)), velocitySize);
+
+            var scale = Math.randomFloat(0.20, 1, 2);
+
+            var rotateAngleDeg = Math.randomFloat(-0.50, 0.50, 2);
+
+            return new Asteroid(pointOfOrigin, velocity, rotateAngleDeg, scale);
+        }
+
+        onStart();
+    }
+
+    var World = asteroids.World = function(stage) {
+
+        var self = this;
+
+        this.debugText = new DebugText();
+
+        var items = {};
+
+        var itemsByClass = {};
+
+        this.stage = stage;
+
+        this.keyPressed = [];
+
+        var idcounter = 0;
+
+        this.game = null;
+
+        document.body.onkeydown = function(ev) {
+            self.keyPressed[ev.keyCode] = true;
+        }
+
+        document.body.onkeyup = function(ev) {
+            self.keyPressed[ev.keyCode] = false;
+        }
+
+        this.nuke = function() {
+            items = {};
+            self.addItem(this.debugText, "debugText"); // this must be always present for obvious reasons
+        }
+
+        this.getItems = function() {
+            return items;
+        }
+
+        this.getItemsByClass = function(className) {
+            return itemsByClass[className] ? itemsByClass[className] : {};
+        }
+
+        this.getItem = function(id) {
+            return items[id];
+        }
+
+        this.addItems = function(items) {
+            for (var i in items) {
+                self.addItem(items[i]);
+            }
+        }
+
+        this.addItem = function(obj, id) {
+            if (!id) {
+                if (obj.id) {
+                    id = obj.id;
+                } else {
+                    id = "undefined_" + (++idcounter); // generate id	
+                }
+            }
+
+            obj.id = id;
+
+            if (!obj.class) {
+                obj.class = obj.constructor.name.toLowerCase() || "unknown";
+            }
+
+            if (obj.hasOwnProperty("alive")) obj.alive = true;
+
+            if (obj.hasOwnProperty("world")) obj.world = self; // inject world instance if requested
+
+            items[obj.id] = obj;
+
+            if (!itemsByClass[obj.class]) {
+                itemsByClass[obj.class] = {};
+            }
+
+            itemsByClass[obj.class][obj.id] = obj;
+        }
+
+        this.update = function() {
+
+            if (self.game && self.game.update) {
+                self.game.update();
+            }
+
+            var i;
+
+            for (i in items) {
+                if (items[i].hasOwnProperty("alive") && !items[i].alive) {
+                    delete itemsByClass[items[i].class][i];
+                    delete items[i];
+                    continue;
+                }
+
+                if (items[i].update) items[i].update();
+            }
+        }
+
+        this.draw = function(ctx) {
+            var i;
+
+            ctx.clearRect(0, 0, self.stage.width, self.stage.height);
+
+            for (i in items) {
+
+                if (items[i].visible === false) continue;
+
+                ctx.save();
+                ctx.beginPath();
+
+                items[i].draw(ctx);
+
+                ctx.closePath();
+                ctx.restore();
+            }
+        }
+
+        this.isOffscreen = function(pivot, w, h) {
+            var x = pivot[0];
+            var y = pivot[1];
+
+            h = h || w;
+
+            var margin = w > h ? w : h;
+
+            var stageW = self.stage.width;
+            var stageH = self.stage.height;
+
+            if (x < -margin) return Direction.WEST;
+            if (y < -margin) return Direction.NORTH;
+            if (x > stageW + margin) return Direction.EAST;
+            if (y > stageH + margin) return Direction.SOUTH;
+
+            return false;
+        }
+
+
+        self.addItem(this.debugText, "debugText");
+    }
+
+    var App = asteroids.App = function(stage) {
+
+        var self = this; // dzavaskript, you fuck !
+
+        var animationId = null;
+
+        this.stage = stage;
+
+        this.ctx = stage.getContext("2d");
+
+        this.world = new World(stage);
+
+        var getAnimationFrame = (function() {
+            return window.requestAnimationFrame ||
+                window.webkitRequestAnimationFrame ||
+                window.mozRequestAnimationFrame ||
+                window.oRequestAnimationFrame ||
+                window.msRequestAnimationFrame ||
+                function( /* function */ callback, /* DOMElement */ element) {
+                    window.setTimeout(callback, 1000 / 60);
+            };
+        })();
+
+        this.animate = function() {
+            try {
+                animationId = getAnimationFrame(self.animate);
+
+                self.world.update();
+                self.world.draw(self.ctx);
+
+            } catch (e) {
+                alert(e);
+                console.log(e);
+                self.terminate();
+            }
+        }
+
+        this.terminate = function() {
+            window.cancelAnimationFrame(animationId);
+            animationId = null;
+        }
+
+    }
+
+    var Angle = asteroids.Angle = function() {}
 
     asteroids.Angle.toDeg = function(rad) {
         return rad * (180 / Math.PI);
@@ -843,21 +996,21 @@ var asteroids = (function(asteroids) {
         return deg * (Math.PI / 180);
     }
 
-	var VectorMath = asteroids.VectorMath = function() {}
+    var VectorMath = asteroids.VectorMath = function() {}
 
     asteroids.VectorMath.add = function(vect1, vect2) {
-    	if(typeof vect2 === "number") vect2 = [vect2, vect2];
-        return [ vect1[0] + vect2[0], vect1[1] + vect2[1] ];
+        if (typeof vect2 === "number") vect2 = [vect2, vect2];
+        return [vect1[0] + vect2[0], vect1[1] + vect2[1]];
     }
 
     asteroids.VectorMath.substract = function(vect1, vect2) {
-    	if(typeof vect2 === "number") vect2 = [vect2, vect2];
-        return [ vect1[0] - vect2[0], vect1[1] - vect2[1] ];
+        if (typeof vect2 === "number") vect2 = [vect2, vect2];
+        return [vect1[0] - vect2[0], vect1[1] - vect2[1]];
     }
 
     asteroids.VectorMath.multiply = function(vect1, vect2) {
-    	if(typeof vect2 === "number") vect2 = [vect2, vect2];
-        return [ vect1[0] * vect2[0], vect1[1] * vect2[1] ];
+        if (typeof vect2 === "number") vect2 = [vect2, vect2];
+        return [vect1[0] * vect2[0], vect1[1] * vect2[1]];
     }
 
     asteroids.VectorMath.size = function(vect1) {
@@ -873,7 +1026,7 @@ var asteroids = (function(asteroids) {
 
     asteroids.VectorMath.normalize = function(vect) {
         var length = VectorMath.size(vect);
-        return [ vect[0] / length, vect[1] / length ];
+        return [vect[0] / length, vect[1] / length];
     }
 
     asteroids.VectorMath.dotProduct = function(vect1, vect2) {
@@ -886,145 +1039,137 @@ var asteroids = (function(asteroids) {
 
     asteroids.VectorMath.rotate = function(vect, angleDeg, pivot) {
         var angleRad = Angle.toRad(angleDeg || 0);
-        pivot = pivot || [0,0];
+        pivot = pivot || [0, 0];
 
         var cs = Math.cos(angleRad);
         var sn = Math.sin(angleRad);
 
-        var x = (vect[0]-pivot[0]) * cs - (vect[1]-pivot[1]) * sn + pivot[0];
-        var y = (vect[0]-pivot[0]) * sn + (vect[1]-pivot[1]) * cs + pivot[1] ;
+        var x = (vect[0] - pivot[0]) * cs - (vect[1] - pivot[1]) * sn + pivot[0];
+        var y = (vect[0] - pivot[0]) * sn + (vect[1] - pivot[1]) * cs + pivot[1];
 
         return [x, y];
     }
 
     asteroids.VectorMath.inverse = function(vect) {
-    	return [ vect[0]*-1, vect[1]*-1 ];
+        return [vect[0] * -1, vect[1] * -1];
     }
 
     asteroids.VectorMath.equals = function(vect1, vect2) {
-    	return vect1[0] === vect2[0] && vect1[1] === vect2[1];
+        return vect1[0] === vect2[0] && vect1[1] === vect2[1];
     }
 
     var Points = asteroids.Points = function(points) {
-		
-    	var self = this;
 
-		if(typeof points.pivot === "undefined" || typeof points.top === "undefined") {
-			throw "Illegal 'Points' definition. Properties points.pivot and points.top must exists.";
-		}
+        var self = this;
 
-		this.getRadius = function() {
-			return VectorMath.distance(points.pivot, points.top);
-		}
+        if (typeof points.pivot === "undefined" || typeof points.top === "undefined") {
+            throw "Illegal 'Points' definition. Properties points.pivot and points.top must exists.";
+        }
 
-		this.add = function(point, id) {
-			id = id || "point_" + Object.keys(points).length;
+        this.getRadius = function() {
+            return VectorMath.distance(points.pivot, points.top);
+        }
 
-			points[id] = point;
-		}
+        this.add = function(point, id) {
+            id = id || "point_" + Object.keys(points).length;
 
-		this.getPoint = function(index) {
-			if(points[index]) {
-				return points[index];
-			} 
+            points[id] = point;
+        }
 
-			throw "No point with index '"+index+"'.";
-		}
+        this.getPoint = function(index) {
+            if (points[index]) {
+                return points[index];
+            }
 
-		this.getPoints = function() {
-			return points;
-		}
+            throw "No point with index '" + index + "'.";
+        }
 
-		this.rotate = function(angleDeg) {
-			
-			if(!!!angleDeg) return;	// starting to think in javascript ... nah, I just put this here for funn xD
+        this.getPoints = function() {
+            return points;
+        }
 
-			for(var i in points) {
-				if(i === "pivot") continue;
+        this.rotate = function(angleDeg) {
 
-				points[i] = VectorMath.rotate(points[i], angleDeg, [points.pivot[0], points.pivot[1]]);
-			}
-		}
+            if ( !! !angleDeg) return; // starting to think in javascript ... nah, I just put this here for funn xD
 
-		this.move = function(velocity) {
-			if(velocity[0] === 0 && velocity[1] === 0) return;
+            for (var i in points) {
+                if (i === "pivot") continue;
 
-			var pivot = points.pivot;
-			
-			for(var i in points) {
-				points[i] = VectorMath.add(points[i], velocity);
-			}
-		}
+                points[i] = VectorMath.rotate(points[i], angleDeg, [points.pivot[0], points.pivot[1]]);
+            }
+        }
 
-		this.moveTo = function(x,y) {
-			if(VectorMath.equals(points.pivot, [x,y])) return;
+        this.move = function(velocity) {
+            if (velocity[0] === 0 && velocity[1] === 0) return;
 
-			var moveTo = VectorMath.substract([x,y], points.pivot);
+            var pivot = points.pivot;
 
-			for(var i in points) {
-				points[i] = VectorMath.add(points[i], moveTo);
-			}
-		}
+            for (var i in points) {
+                points[i] = VectorMath.add(points[i], velocity);
+            }
+        }
 
-		this.getDirection = function() {
-			return VectorMath.normalize(VectorMath.substract(points.top, points.pivot));
-		}
+        this.moveTo = function(x, y) {
+            if (VectorMath.equals(points.pivot, [x, y])) return;
 
-		this.resetPositionInRectangle = function(offsetPosition, rectW, rectH) {
+            var moveTo = VectorMath.substract([x, y], points.pivot);
 
-			var pivot = points.pivot;
+            for (var i in points) {
+                points[i] = VectorMath.add(points[i], moveTo);
+            }
+        }
 
-			if(VectorMath.equals(Direction.NORTH, offsetPosition)) 
-			{ 
-				self.moveTo(pivot[0], pivot[1]+rectW); 
-			} 
-			else if(VectorMath.equals(Direction.SOUTH, offsetPosition)) 
-			{ 
-				self.moveTo(pivot[0], pivot[1]-rectW); 
-			} 
-			else if(VectorMath.equals(Direction.WEST, offsetPosition)) 
-			{ 
-				self.moveTo(pivot[0]+rectH, pivot[1]); 
-			}
-			else if(VectorMath.equals(Direction.EAST, offsetPosition)) 
-			{ 
-				self.moveTo(pivot[0]-rectH, pivot[1]); 
-			} else 
-			{
-				self.moveTo(rectW,rectH);
-			}
+        this.getDirection = function() {
+            return VectorMath.normalize(VectorMath.substract(points.top, points.pivot));
+        }
 
-		}
+        this.resetPositionInRectangle = function(offsetPosition, rectW, rectH) {
 
-	}
+            var pivot = points.pivot;
 
-	var CollisionType = asteroids.CollisionType = function() {}
+            if (VectorMath.equals(Direction.NORTH, offsetPosition)) {
+                self.moveTo(pivot[0], pivot[1] + rectH);
+            } else if (VectorMath.equals(Direction.SOUTH, offsetPosition)) {
+                self.moveTo(pivot[0], pivot[1] - rectH);
+            } else if (VectorMath.equals(Direction.WEST, offsetPosition)) {
+                self.moveTo(pivot[0] + rectW, pivot[1]);
+            } else if (VectorMath.equals(Direction.EAST, offsetPosition)) {
+                self.moveTo(pivot[0] - rectW, pivot[1]);
+            } else {
+                self.moveTo(rectW, rectH);
+            }
 
-	CollisionType.NONE = 0;
-	CollisionType.TOUCH = 1;
-	CollisionType.INNER = 2;
+        }
 
-	var Collisions = asteroids.Collisions = function() {}
+    }
 
-	asteroids.Collisions.circleCollision = function(obj1, obj2) {
-		if(!obj1.points) throw "obj1 does not expose points field.";
-		if(!obj2.points) throw "obj2 does not expose points field.";
+    var CollisionType = asteroids.CollisionType = function() {}
 
-		var pivot1 = obj1.points.getPoint('pivot');
-		var pivot2 = obj2.points.getPoint('pivot');
+    CollisionType.NONE = 0;
+    CollisionType.TOUCH = 1;
+    CollisionType.INNER = 2;
 
-		var rad1 = obj1.points.getRadius();
-		var rad2 = obj2.points.getRadius();
+    var Collisions = asteroids.Collisions = function() {}
 
-		var radSum = rad1 + rad2;
-		var distance = VectorMath.distance(pivot1, pivot2);
+    asteroids.Collisions.circleCollision = function(obj1, obj2) {
+        if (!obj1.points) throw "obj1 does not expose points field.";
+        if (!obj2.points) throw "obj2 does not expose points field.";
 
-		if(radSum > distance) return CollisionType.INNER;
-		if(radSum == distance) return CollisionType.TOUCH;
-		
-		return CollisionType.NONE;
-	}
+        var pivot1 = obj1.points.getPoint('pivot');
+        var pivot2 = obj2.points.getPoint('pivot');
 
-	return asteroids;
+        var rad1 = obj1.points.getRadius();
+        var rad2 = obj2.points.getRadius();
+
+        var radSum = rad1 + rad2;
+        var distance = VectorMath.distance(pivot1, pivot2);
+
+        if (radSum > distance) return CollisionType.INNER;
+        if (radSum == distance) return CollisionType.TOUCH;
+
+        return CollisionType.NONE;
+    }
+
+    return asteroids;
 
 })(asteroids || {});
