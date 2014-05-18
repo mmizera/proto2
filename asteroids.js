@@ -826,7 +826,7 @@ var asteroids = (function(asteroids) {
         var onEnd = function() {
             app.stage.style.cursor = "";
 
-            app.world.debugText.values["game.state"] = "GAME OVER";
+            app.world.debugText.values["game.state"] = "GAME OVER (mouse click or F5 for new game ...)";
 
             // restart game with mouse click
             stage.onclick = function(ev) {
