@@ -30,17 +30,23 @@ Math.randomFloat = function(low, high, decimalPlaces) {
 var asteroids = (function(asteroids) {
 
     var Key = asteroids.Key = function() {};
-    asteroids.Key.SPACE = 32;
-    asteroids.Key.ARROW_LEFT = 37;
-    asteroids.Key.ARROW_UP = 38;
+    asteroids.Key.SPACE       = 32;
+    asteroids.Key.ARROW_LEFT  = 37;
+    asteroids.Key.ARROW_UP    = 38;
     asteroids.Key.ARROW_RIGHT = 39;
-    asteroids.Key.ARROW_DOWN = 40;
+    asteroids.Key.ARROW_DOWN  = 40;
 
-    var Direction = asteroids.Direction = function() {}
+    var Direction = asteroids.Direction = function() {};
     asteroids.Direction.NORTH = [0, -1];
     asteroids.Direction.SOUTH = [0, 1];
-    asteroids.Direction.WEST = [-1, 0];
-    asteroids.Direction.EAST = [1, 0];
+    asteroids.Direction.WEST  = [-1, 0];
+    asteroids.Direction.EAST  = [1, 0];
+
+    var Settings = asteroids.Settings = function() {};
+    Settings.GENERATE_ASTEROIDS = true;    
+    Settings.GENERATE_PERKS     = true;         
+    Settings.SHIP_IMMORTAL      = false;
+    Settings.SHIP_CANNONS_LEVEL = 0;        // starts from zero
 
     asteroids.Arrow = function(x, y, scale) {
 
@@ -86,11 +92,11 @@ var asteroids = (function(asteroids) {
         this.draw = function(ctx) {
             var p = points;
 
-            ctx.moveTo(p.bottom[0], p.bottom[1]); // bottom
-            ctx.lineTo(p.top[0], p.top[1]); // top
-            ctx.lineTo(p.topLeft[0], p.topLeft[1]); // topLeft
+            ctx.moveTo(p.bottom[0], p.bottom[1]);     // bottom
+            ctx.lineTo(p.top[0], p.top[1]);           // top
+            ctx.lineTo(p.topLeft[0], p.topLeft[1]);   // topLeft
             ctx.lineTo(p.topRight[0], p.topRight[1]); // topRight
-            ctx.lineTo(p.top[0], p.top[1]); // top
+            ctx.lineTo(p.top[0], p.top[1]);           // top
 
             ctx.strokeStyle = self.strokeStyle;
             ctx.fillStyle = self.strokeStyle;
@@ -99,7 +105,7 @@ var asteroids = (function(asteroids) {
         }
 
         this.rotate = function(angleDeg) {
-            if ( !! !angleDeg) return; // starting to think in javascript ... nah, I just put this here for funn xD
+            if ( !! !angleDeg) return; 
 
             for (var i in points) {
                 if (i === "pivot") continue;
@@ -327,8 +333,6 @@ var asteroids = (function(asteroids) {
 
         this.id = "ship";
 
-        this.isImortal = false;
-
         this.perksManagement = null;
 
         this.points = new Points({
@@ -360,7 +364,7 @@ var asteroids = (function(asteroids) {
             self.move();
 
             // debug
-            perks = {};
+            /*perks = {};
             perks[PerkType.DOUBLE_DAMAGE] = 'DOUBLE_DAMAGE';
             perks[PerkType.FIRE_RATE] = 'FIRE_RATE';
             perks[PerkType.MORE_CANNONS] = 'MORE_CANNONS';
@@ -369,7 +373,7 @@ var asteroids = (function(asteroids) {
                 if (self.perksManagement.isActive(i)) {
                     self.world.debugText.values[perks[i]] = self.perksManagement.getPerkMagnitude(i) + " lvl";
                 }
-            }
+            }*/
         }
 
         this.move = function() {
@@ -399,9 +403,11 @@ var asteroids = (function(asteroids) {
 
             self.world.addItem(new Projectile(pivot, velocity, null, doubleDamage));
 
-            // TODO : multiple cannon fire is not olrajt yet ...
-            if (self.perksManagement.isActive(PerkType.MORE_CANNONS)) {
-                var cannonsLevel = self.perksManagement.getPerkMagnitude(PerkType.MORE_CANNONS);
+            // TODO : multiple cannon fire is not olrajt yet ... [ in progress ]
+            if (self.perksManagement.isActive(PerkType.MORE_CANNONS) || Settings.SHIP_CANNONS_LEVEL > 0) {
+                var cannonsLevelByPerk = self.perksManagement.getPerkMagnitude(PerkType.MORE_CANNONS);
+
+                var cannonsLevel = Settings.SHIP_CANNONS_LEVEL > cannonsLevelByPerk ? Settings.SHIP_CANNONS_LEVEL : cannonsLevelByPerk;
 
                 if (cannonsLevel > 0) { // add back cannon
                     self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 180)), null, doubleDamage));
@@ -427,8 +433,6 @@ var asteroids = (function(asteroids) {
                 currentFireRate -= bonus;
                 if (currentFireRate < 100) currentFireRate = 100;
             }
-
-            self.world.debugText.values['ship.firerate'] = currentFireRate;
 
             fireActionLock = (now) + currentFireRate;
         }
@@ -465,8 +469,8 @@ var asteroids = (function(asteroids) {
         }
 
         this.collide = function() {
-            // for debug purposes (or for some cheating bastards ...)
-            if (self.isImortal) {
+
+            if (Settings.SHIP_IMMORTAL) {
                 return;
             }
 
@@ -799,6 +803,8 @@ var asteroids = (function(asteroids) {
 
             // register locks
             app.world.clock.registerLock('create_perk_attempt', 1000);
+
+            app.stage.style.cursor = "none";
         }
 
         var onProgress = function() {
@@ -818,6 +824,8 @@ var asteroids = (function(asteroids) {
         }
 
         var onEnd = function() {
+            app.stage.style.cursor = "";
+
             app.world.debugText.values["game.state"] = "GAME OVER";
 
             // restart game with mouse click
@@ -845,6 +853,8 @@ var asteroids = (function(asteroids) {
         }
 
         var generateAsteroid = function(stage) {
+
+            if(!Settings.GENERATE_ASTEROIDS) return;
 
             var sW = stage.width;
             var sH = stage.height;
@@ -879,6 +889,8 @@ var asteroids = (function(asteroids) {
         }
 
         var generatePerkAttempt = function() {
+
+            if(!Settings.GENERATE_PERKS) return;
 
             if (Math.randomInt(1, 5) <= 3) return; // 40% chance of perk creation (+- I do not know the exact theory behing js random method)
 
