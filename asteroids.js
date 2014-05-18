@@ -479,6 +479,15 @@ var asteroids = (function(asteroids) {
                     break;
                 }
             }
+
+            var perks = this.world.getItemsByClass('perk');
+
+            for(var i in perks) {
+                if(Collisions.circleCollision(self, perks[i])) {
+                    self.perksManagement.addPerk(perks[i]);
+                    perks[i].alive = false;
+                }
+            }
         }
     }
 
@@ -523,7 +532,7 @@ var asteroids = (function(asteroids) {
             var p = this.points.getPoints();
 
             ctx.strokeStyle = doubleDamage ? "#0ff" : "#f00";
-            
+
             ctx.moveTo(p.top[0], p.top[1]);
             ctx.lineTo(p.bottom[0], p.bottom[1]);
             ctx.lineTo(p.left[0], p.left[1]);
@@ -615,7 +624,7 @@ var asteroids = (function(asteroids) {
 
         var points = generatePoints(pivot[0], pivot[1], scale, nodes);
 
-        this.points = points; // TODO : this can get lil bit confusing ... points must be exposed due collision detection
+        this.points = points;
 
         var size = VectorMath.distance(points.getPoint('pivot'), points.getPoint('top')) * 2;
 
@@ -664,7 +673,7 @@ var asteroids = (function(asteroids) {
             points.rotate(rotateAngleDeg);
             points.move(velocity);
 
-            if (self.world.isOffscreen(points.getPoint('pivot'), size + 50)) { // TODO: fix 'bulgarian' constant :)
+            if (self.world.isOffscreen(points.getPoint('pivot'), size + 50)) { 
                 this.alive = false;
             }
         }
@@ -703,7 +712,11 @@ var asteroids = (function(asteroids) {
         validUntil[PerkType.MORE_CANNONS] = 15;
 
         this.addPerk = function(perkType) {
-            //if (typeof perkType !== "number") return;
+            if (typeof perkType === "object") {
+                if(perkType.type) {
+                    perkType = perkType.type;
+                }
+            } 
 
             if (self.getPerkMagnitude(perkType) >= MAX_MAGNITUDE) {
                 return;
@@ -832,8 +845,6 @@ var asteroids = (function(asteroids) {
         }
 
         var generateAsteroid = function(stage) {
-
-            // return; // TODO : remove this
 
             var sW = stage.width;
             var sH = stage.height;
