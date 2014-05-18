@@ -522,8 +522,8 @@ var asteroids = (function(asteroids) {
         this.draw = function(ctx) {
             var p = this.points.getPoints();
 
-            ctx.strokeStyle = "#f00";
-
+            ctx.strokeStyle = doubleDamage ? "#0ff" : "#f00";
+            
             ctx.moveTo(p.top[0], p.top[1]);
             ctx.lineTo(p.bottom[0], p.bottom[1]);
             ctx.lineTo(p.left[0], p.left[1]);
@@ -557,7 +557,10 @@ var asteroids = (function(asteroids) {
             for (var i in perks) {
                 if (Collisions.circleCollision(self, perks[i]) === CollisionType.INNER) {
                     perks[i].alive = false;
-                    self.world.getItem('ship').perksManagement.addPerk(perks[i].type);
+                    var ship = self.world.getItem('ship');
+                    if(ship) {
+                        ship.perksManagement.addPerk(perks[i].type);
+                    }
                     break;
                 }
             }
