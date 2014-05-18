@@ -231,6 +231,12 @@ var asteroids = (function(asteroids) {
 
         this.type = type = type || Math.randomInt(0, Object.keys(PerkType).length - 1);
 
+        var lifespan = Math.randomInt(5, 15);
+
+        this.world = null;
+
+        this.alive = true;
+
         this.points = new Points({
             pivot: [x, y],
             top: [x, y - 7 * scale],
@@ -245,9 +251,21 @@ var asteroids = (function(asteroids) {
             right: [x + 4 * scale, y - 4 * scale]
         });
 
+        this.init = function() {
+            self.world.clock.registerLock('perk_countdown_' + this.id, 1000);
+        }
+
         this.update = function() {
             self.points.rotate(+3);
             self.points2.rotate(-3);
+
+            if (!self.world.clock.isLocked('perk_countdown_' + this.id)) {
+                --lifespan;
+            }
+
+            if (lifespan < 1) {
+                self.alive = false;
+            }
         }
 
         this.draw = function(ctx) {
@@ -301,7 +319,9 @@ var asteroids = (function(asteroids) {
 
         this.MAX_VELOCITY = 7;
 
-        var FIRE_RATE = 300; // 1 projectile per xxx milisec
+        var MIN_FIRE_RATE = 100; // 1 projectile per xxx milisec
+
+        var MAX_FIRE_RATE = 300; // 1 projectile per xxx milisec
 
         var fireActionLock = 0;
 
@@ -309,7 +329,7 @@ var asteroids = (function(asteroids) {
 
         this.isImortal = false;
 
-        this.perksManagement = new PerksManagement();
+        this.perksManagement = null;
 
         this.points = new Points({
             pivot: [x, y],
@@ -325,6 +345,10 @@ var asteroids = (function(asteroids) {
 
         this.height = VectorMath.distance(this.points.getPoint("left"), this.points.getPoint("right"));
 
+        this.init = function() {
+            self.perksManagement = new PerksManagement(self.world);
+        }
+
         this.update = function() {
             // key bindings
             if ( !! self.world.keyPressed[Key.ARROW_LEFT]) self.points.rotate(-5);
@@ -334,6 +358,18 @@ var asteroids = (function(asteroids) {
 
             // actions
             self.move();
+
+            // debug
+            perks = {};
+            perks[PerkType.DOUBLE_DAMAGE] = 'DOUBLE_DAMAGE';
+            perks[PerkType.FIRE_RATE] = 'FIRE_RATE';
+            perks[PerkType.MORE_CANNONS] = 'MORE_CANNONS';
+
+            for (var i in perks) {
+                if (self.perksManagement.isActive(i)) {
+                    self.world.debugText.values[perks[i]] = self.perksManagement.getPerkMagnitude(i) + " lvl";
+                }
+            }
         }
 
         this.move = function() {
@@ -363,21 +399,36 @@ var asteroids = (function(asteroids) {
 
             self.world.addItem(new Projectile(pivot, velocity, null, doubleDamage));
 
+            // TODO : multiple cannon fire is not olrajt yet ...
             if (self.perksManagement.isActive(PerkType.MORE_CANNONS)) {
                 var cannonsLevel = self.perksManagement.getPerkMagnitude(PerkType.MORE_CANNONS);
 
-                //if(cannonsLevel === 1) {
-                self.world.addItem(new Projectile(pivot, VectorMath.rotate(velocity, 180), null, doubleDamage));
-                // }
+                if (cannonsLevel > 0) { // add back cannon
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 180)), null, doubleDamage));
+                }
+                if (cannonsLevel > 1) { // add west/east cannons
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 90)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.rotate(velocity, -90), null, doubleDamage));
+                }
+                if (cannonsLevel > 2) { // add even moar cannons (north-west, south-east etc.)
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 45)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -45)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 135)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -135)), null, doubleDamage));
+                }
             }
 
-            var currentFireRate = FIRE_RATE
+            var currentFireRate = MAX_FIRE_RATE;
             if (self.perksManagement.isActive(PerkType.FIRE_RATE)) {
                 var magnitude = self.perksManagement.getPerkMagnitude(PerkType.FIRE_RATE);
 
-                currentFireRate -= (magnitude * 100);
-                if (currentFireRate < 5) currentFireRate = 5;
+                var bonus = ((MAX_FIRE_RATE - MIN_FIRE_RATE) / self.perksManagement.MAX_MAGNITUDE) * magnitude;
+
+                currentFireRate -= bonus;
+                if (currentFireRate < 100) currentFireRate = 100;
             }
+
+            self.world.debugText.values['ship.firerate'] = currentFireRate;
 
             fireActionLock = (now) + currentFireRate;
         }
@@ -627,9 +678,14 @@ var asteroids = (function(asteroids) {
         }
     }
 
-    var PerksManagement = asteroids.PerksManagement = function() {
+    var PerksManagement = asteroids.PerksManagement = function(world) {
+
+        var MAX_MAGNITUDE = 4;
+        this.MAX_MAGNITUDE = MAX_MAGNITUDE;
 
         var self = this;
+
+        this.world = world;
 
         // one perk duration in sec.
         var perkDurations = {};
@@ -644,13 +700,19 @@ var asteroids = (function(asteroids) {
         validUntil[PerkType.MORE_CANNONS] = 15;
 
         this.addPerk = function(perkType) {
-            if (typeof perkType !== "number") return;
+            //if (typeof perkType !== "number") return;
 
-            validUntil[perkType] += (perkDurations[perkType] * 1000) + (self.isActive(perkType) ? 0 : Date.now());
+            if (self.getPerkMagnitude(perkType) >= MAX_MAGNITUDE) {
+                return;
+            }
+
+            var perkMagnitude = self.getPerkMagnitude(perkType) + 1;
+
+            validUntil[perkType] = world.clock.now + perkDurations[perkType] * 1000 * perkMagnitude;
         }
 
         this.isActive = function(perkType) {
-            if (typeof perkType !== "number") return;
+            // if (typeof perkType !== "number") return;
 
             return Date.now() < validUntil[perkType];
         }
@@ -718,20 +780,23 @@ var asteroids = (function(asteroids) {
             app.world.game = self; // for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
 
             this.score = 0;
+
+            // register locks
+            app.world.clock.registerLock('create_perk_attempt', 1000);
         }
 
         var onProgress = function() {
-            var now = Date.now();
+            var clock = app.world.clock;
 
-            if (now > generateAsteroidsLock) {
-                app.world.addItem(generateAsteroid(stage));
-                generateAsteroidsLock = now + GENERATE_ASTEROIDS_RATE;
+            if (clock.now > generateAsteroidsLock) {
+                generateAsteroid(stage);
+                generateAsteroidsLock = clock.now + GENERATE_ASTEROIDS_RATE;
 
                 GENERATE_ASTEROIDS_RATE = Math.randomInt(500, 1000);
             }
 
-            stage.onclick = function(ev) {
-                app.world.addItem(new Perk(ev.clientX, ev.clientY));
+            if (!clock.isLocked('create_perk_attempt')) {
+                generatePerkAttempt();
             }
 
         }
@@ -758,16 +823,14 @@ var asteroids = (function(asteroids) {
             }
 
         var generateAsteroids = function(stage, count) {
-            var asteroids = [];
-
             for (var i = 0; i < count; i++) {
-                asteroids.push(generateAsteroid(stage));
+                generateAsteroid(stage);
             }
-
-            return asteroids;
         }
 
         var generateAsteroid = function(stage) {
+
+            // return; // TODO : remove this
 
             var sW = stage.width;
             var sH = stage.height;
@@ -798,7 +861,19 @@ var asteroids = (function(asteroids) {
 
             var rotateAngleDeg = Math.randomFloat(-0.50, 0.50, 2);
 
-            return new Asteroid(pointOfOrigin, velocity, rotateAngleDeg, scale);
+            app.world.addItem(new Asteroid(pointOfOrigin, velocity, rotateAngleDeg, scale));
+        }
+
+        var generatePerkAttempt = function() {
+
+            if (Math.randomInt(1, 5) <= 3) return; // 40% chance of perk creation (+- I do not know the exact theory behing js random method)
+
+            var padding = 20;
+            var x = Math.randomInt(padding, stage.width - padding);
+            var y = Math.randomInt(padding, stage.height - padding);
+
+            app.world.addItem(new Perk(x, y));
+
         }
 
         onStart();
@@ -821,6 +896,8 @@ var asteroids = (function(asteroids) {
         var idcounter = 0;
 
         this.game = null;
+
+        this.clock = new Clock();
 
         document.body.onkeydown = function(ev) {
             self.keyPressed[ev.keyCode] = true;
@@ -879,9 +956,15 @@ var asteroids = (function(asteroids) {
             }
 
             itemsByClass[obj.class][obj.id] = obj;
+
+            if (typeof obj.init === 'function') {
+                obj.init();
+            }
         }
 
         this.update = function() {
+
+            self.clock.update();
 
             if (self.game && self.game.update) {
                 self.game.update();
@@ -1139,6 +1222,39 @@ var asteroids = (function(asteroids) {
                 self.moveTo(rectW, rectH);
             }
 
+        }
+
+    }
+
+    var Clock = function() {
+
+        var self = this;
+
+        this.now = Date.now();
+
+        var timelocks = {};
+
+        this.update = function() {
+            this.now = Date.now();
+        }
+
+        // duration in milis
+        this.registerLock = function(id, duration) {
+            timelocks[id] = {
+                'duration': duration,
+                'lock': 0
+            };
+        }
+
+        this.isLocked = function(id) {
+            if ( !! !timelocks[id]) throw "There is no such lock registered. [ lockId = '" + id + "' ]";
+
+            if (timelocks[id].lock > self.now) {
+                return true;
+            } else {
+                timelocks[id].lock = self.now + timelocks[id].duration;
+                return false;
+            }
         }
 
     }
