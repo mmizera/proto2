@@ -7,7 +7,7 @@ can not fly properly (amongst other issues), <br />
 so I decided to go from scratch again <br />
 and more lightweight ...<br />
 
-<br /><br />
+<br />
 
 ![](https://github.com/mmizera/proto2/blob/master/shoot.png?raw=true])
 
