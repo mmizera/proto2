@@ -762,6 +762,7 @@ var asteroids = (function(asteroids) {
         this.state = GameState.START;
 
         // init
+
         var stage = getStage(document.body.clientWidth, document.body.clientHeight);
 
         var app = new App(stage);
@@ -968,7 +969,7 @@ var asteroids = (function(asteroids) {
             obj.id = id;
 
             if (!obj.class) {
-                obj.class = obj.constructor.name.toLowerCase() || "unknown";
+                obj.class = "unknown";
             }
 
             if (obj.hasOwnProperty("alive")) obj.alive = true;
