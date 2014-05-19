@@ -34,7 +34,13 @@ var asteroids = (function(asteroids) {
     asteroids.Key.ARROW_LEFT  = 37;
     asteroids.Key.ARROW_UP    = 38;
     asteroids.Key.ARROW_RIGHT = 39;
-    asteroids.Key.ARROW_DOWN  = 40;
+    
+    asteroids.Key.A           = 65;
+    asteroids.Key.D           = 68;
+    asteroids.Key.G           = 71;
+    asteroids.Key.W           = 87;
+
+    Key.TILDA = 96;
 
     var Direction = asteroids.Direction = function() {};
     asteroids.Direction.NORTH = [0, -1];
@@ -48,6 +54,21 @@ var asteroids = (function(asteroids) {
     Settings.SHIP_IMMORTAL      = false;
     Settings.SHIP_CANNONS_LEVEL = 0;        // starts from zero
     Settings.SHOW_FPS           = true;
+    Settings.MULTIPLAYER        = true;
+
+    Settings.KEY_BINDINGS_PLAYER1 = {
+        left  : Key.ARROW_LEFT,
+        right : Key.ARROW_RIGHT,
+        up    : Key.ARROW_UP,
+        fire  : Key.SPACE
+    };
+
+    Settings.KEY_BINDINGS_PLAYER2 = {
+        left  : Key.A,
+        right : Key.D,
+        up    : Key.W,
+        fire  : Key.G
+    };
 
     asteroids.Arrow = function(x, y, scale) {
 
@@ -312,7 +333,7 @@ var asteroids = (function(asteroids) {
         }
     }
 
-    var Ship = asteroids.Ship = function(x, y, scale) {
+    var Ship = asteroids.Ship = function(x, y, scale, keyBindings) {
 
         var self = this;
 
@@ -333,6 +354,8 @@ var asteroids = (function(asteroids) {
         var fireActionLock = 0;
 
         this.id = "ship";
+
+        this.class = "ship";
 
         this.perksManagement = null;
 
@@ -356,10 +379,10 @@ var asteroids = (function(asteroids) {
 
         this.update = function() {
             // key bindings
-            if ( !! self.world.keyPressed[Key.ARROW_LEFT]) self.points.rotate(-5);
-            if ( !! self.world.keyPressed[Key.ARROW_RIGHT]) self.points.rotate(+5);
-            if ( !! self.world.keyPressed[Key.ARROW_UP]) self.accelerate();
-            if ( !! self.world.keyPressed[Key.SPACE]) self.fire();
+            if ( !! self.world.keyPressed[keyBindings.left]) self.points.rotate(-5);
+            if ( !! self.world.keyPressed[keyBindings.right]) self.points.rotate(+5);
+            if ( !! self.world.keyPressed[keyBindings.up]) self.accelerate();
+            if ( !! self.world.keyPressed[keyBindings.fire]) self.fire();
 
             // actions
             self.move();
@@ -402,7 +425,7 @@ var asteroids = (function(asteroids) {
 
             var doubleDamage = self.perksManagement.isActive(PerkType.DOUBLE_DAMAGE);
 
-            self.world.addItem(new Projectile(pivot, velocity, null, doubleDamage));
+            self.world.addItem(new Projectile(pivot, velocity, null, doubleDamage, self.id));
 
             // TODO : multiple cannon fire is not olrajt yet ... [ in progress ]
             if (self.perksManagement.isActive(PerkType.MORE_CANNONS) || Settings.SHIP_CANNONS_LEVEL > 0) {
@@ -411,17 +434,17 @@ var asteroids = (function(asteroids) {
                 var cannonsLevel = Settings.SHIP_CANNONS_LEVEL > cannonsLevelByPerk ? Settings.SHIP_CANNONS_LEVEL : cannonsLevelByPerk;
 
                 if (cannonsLevel > 0) { // add back cannon
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 180)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 180)), null, doubleDamage, self.id));
                 }
                 if (cannonsLevel > 1) { // add west/east cannons
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 90)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 90)), null, doubleDamage, self.id));
                     self.world.addItem(new Projectile(pivot, VectorMath.rotate(velocity, -90), null, doubleDamage));
                 }
                 if (cannonsLevel > 2) { // add even moar cannons (north-west, south-east etc.)
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 45)), null, doubleDamage));
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -45)), null, doubleDamage));
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 135)), null, doubleDamage));
-                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -135)), null, doubleDamage));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 45)), null, doubleDamage, self.id));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -45)), null, doubleDamage, self.id));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, 135)), null, doubleDamage, self.id));
+                    self.world.addItem(new Projectile(pivot, VectorMath.add(self.velocity, VectorMath.rotate(velocity, -135)), null, doubleDamage, self.id));
                 }
             }
 
@@ -480,7 +503,6 @@ var asteroids = (function(asteroids) {
             for (var i in asteroids) {
                 if (Collisions.circleCollision(self, asteroids[i])) {
                     self.alive = false;
-                    this.world.game.state = GameState.END;
                     break;
                 }
             }
@@ -496,7 +518,7 @@ var asteroids = (function(asteroids) {
         }
     }
 
-    var Projectile = asteroids.Projectile = function(pivot, velocity, scale, doubleDamage) {
+    var Projectile = asteroids.Projectile = function(pivot, velocity, scale, doubleDamage, firedFromId) {
 
         var self = this;
 
@@ -571,7 +593,7 @@ var asteroids = (function(asteroids) {
             for (var i in perks) {
                 if (Collisions.circleCollision(self, perks[i]) === CollisionType.INNER) {
                     perks[i].alive = false;
-                    var ship = self.world.getItem('ship');
+                    var ship = self.world.getItem(firedFromId);
                     if(ship) {
                         ship.perksManagement.addPerk(perks[i].type);
                     }
@@ -795,8 +817,15 @@ var asteroids = (function(asteroids) {
 
         var onStart = function() {
             app.world.nuke();
-            app.world.addItem(new Ship(stage.width / 2, stage.height / 2));
+            
+            app.world.addItem(new Ship(stage.width / 2, stage.height / 2, null, Settings.KEY_BINDINGS_PLAYER1));
+            
+            if(Settings.MULTIPLAYER) {
+                app.world.addItem(new Ship(stage.width / 2 - 50, stage.height / 2, null, Settings.KEY_BINDINGS_PLAYER2), 'ship2');
+            }
+
             app.animate();
+            
             self.state = GameState.IN_PROGRESS;
 
             app.world.game = self; // for update callback (in prototype3 hierarchy app <-> world <-> game must be modified)
@@ -819,6 +848,10 @@ var asteroids = (function(asteroids) {
 
             if (!clock.isLocked('create_perk_attempt')) {
                 generatePerkAttempt();
+            }
+
+            if(app.world.countItemsByClass('ship') === 0) {
+                self.state = GameState.END;
             }
 
         }
@@ -974,6 +1007,14 @@ var asteroids = (function(asteroids) {
             return itemsByClass[className] ? itemsByClass[className] : {};
         }
 
+        this.countItemsByClass = function(className) {
+            if(!itemsByClass[className]) {
+                return 0;
+            } else {
+                return Object.keys(itemsByClass[className]).length;    
+            }
+        }
+
         this.getItem = function(id) {
             return items[id];
         }
@@ -1002,6 +1043,10 @@ var asteroids = (function(asteroids) {
             if (obj.hasOwnProperty("alive")) obj.alive = true;
 
             if (obj.hasOwnProperty("world")) obj.world = self; // inject world instance if requested
+
+            if(items[obj.id]) {
+                throw "Item with id '"+obj.id+"' already exists in this world.";
+            }
 
             items[obj.id] = obj;
 
