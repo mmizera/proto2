@@ -46,7 +46,7 @@ var asteroids = (function(asteroids) {
     Settings.GENERATE_ASTEROIDS = true;    
     Settings.GENERATE_PERKS     = true;         
     Settings.SHIP_IMMORTAL      = false;
-    Settings.SHIP_CANNONS_LEVEL = 3;        // starts from zero
+    Settings.SHIP_CANNONS_LEVEL = 0;        // starts from zero
     Settings.SHOW_FPS           = true;
 
     asteroids.Arrow = function(x, y, scale) {
