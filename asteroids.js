@@ -54,7 +54,7 @@ var asteroids = (function(asteroids) {
     Settings.SHIP_IMMORTAL      = false;
     Settings.SHIP_CANNONS_LEVEL = 0;        // starts from zero
     Settings.SHOW_FPS           = true;
-    Settings.MULTIPLAYER        = true;
+    Settings.MULTIPLAYER        = false;
 
     Settings.KEY_BINDINGS_PLAYER1 = {
         left  : Key.ARROW_LEFT,
