@@ -1,0 +1,28 @@
+
+
+	Drone (ship with combad AI) strategies
+	==========================================
+
+
+	holdPost()
+		- zero or almost zero speed
+		- lock on most dangerous target (evaluate of dangerous targets - colision course + short distance + speed, can it fire agains drone ?)
+		- fire till target destroyed, then evaluate new target
+
+	cruise()
+		- aquire slow-mid speed to constant point
+		- lock on closest (most dangerous) target
+		- fire till target destroyed, then evaluate new target
+
+	attackAggresive()
+		- lock on target
+		- accelerate in fire direction
+		- fire till target destroyed
+		- immediate deceleration to almost zero speed
+		- evaluate next target and repeat pattern
+
+
+	firing solutions :
+		- fire ahead of target path
+		- evaluate if locked target was hit (hp is shrinking)
+		- if target remains intact, consider altering firing solution path ...

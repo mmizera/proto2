@@ -46,7 +46,8 @@ var asteroids = (function(asteroids) {
     Settings.GENERATE_ASTEROIDS = true;    
     Settings.GENERATE_PERKS     = true;         
     Settings.SHIP_IMMORTAL      = false;
-    Settings.SHIP_CANNONS_LEVEL = 0;        // starts from zero
+    Settings.SHIP_CANNONS_LEVEL = 3;        // starts from zero
+    Settings.SHOW_FPS           = true;
 
     asteroids.Arrow = function(x, y, scale) {
 
@@ -188,7 +189,7 @@ var asteroids = (function(asteroids) {
 
         this.id = "debugText";
 
-        this.lineHeight = 12;
+        this.fontSize = 12;
 
         this.visible = true;
 
@@ -210,12 +211,12 @@ var asteroids = (function(asteroids) {
         };
 
         this.draw = function(ctx) {
-            ctx.font = "12px monospace";
+            ctx.font = this.fontSize + "px monospace";
             ctx.fillStyle = "#0f0";
 
             var rows = self.values.toArray();
             for (var i in rows) {
-                ctx.fillText(rows[i], 10, 10 + this.lineHeight * ((i * 1) + 1));
+                ctx.fillText(rows[i], 10, 10 + this.fontSize * ((i * 1) + 1));
             }
         }
 
@@ -804,8 +805,6 @@ var asteroids = (function(asteroids) {
 
             // register locks
             app.world.clock.registerLock('create_perk_attempt', 1000);
-
-            app.stage.style.cursor = "none";
         }
 
         var onProgress = function() {
@@ -825,8 +824,6 @@ var asteroids = (function(asteroids) {
         }
 
         var onEnd = function() {
-            app.stage.style.cursor = "";
-
             app.world.debugText.values["game.state"] = "GAME OVER (mouse click or F5 for new game ...)";
 
             // restart game with mouse click
@@ -906,11 +903,37 @@ var asteroids = (function(asteroids) {
         onStart();
     }
 
+    var Fps = asteroids.Fps = function(clock) {
+
+        var fpsCurrent = 0;
+
+        var fpsLast = 0;
+
+        var currentSecond = 0;     
+
+        this.update = function() {
+
+            if( (clock.now - currentSecond) > 1000) {
+                currentSecond = clock.now;    // update sec
+                fpsLast = fpsCurrent;
+                fpsCurrent = 0;
+            } else {
+                fpsCurrent++;
+            }
+        }
+
+        this.getFps = function() {
+            return fpsLast !== 0 ? fpsLast : fpsCurrent;
+        }
+
+    }
+
     var World = asteroids.World = function(stage) {
 
         var self = this;
 
         this.debugText = new DebugText();
+        this.debugText.fontSize = 16;
 
         var items = {};
 
@@ -925,6 +948,10 @@ var asteroids = (function(asteroids) {
         this.game = null;
 
         this.clock = new Clock();
+
+        if(Settings.SHOW_FPS) {
+            this.fps = new Fps(this.clock);
+        }
 
         document.body.onkeydown = function(ev) {
             self.keyPressed[ev.keyCode] = true;
@@ -992,6 +1019,7 @@ var asteroids = (function(asteroids) {
         this.update = function() {
 
             self.clock.update();
+            if(self.fps) self.fps.update();
 
             if (self.game && self.game.update) {
                 self.game.update();
@@ -1008,6 +1036,9 @@ var asteroids = (function(asteroids) {
 
                 if (items[i].update) items[i].update();
             }
+
+            // debug
+            if(self.fps) self.debugText.values['fps'] = self.fps.getFps();
         }
 
         this.draw = function(ctx) {
