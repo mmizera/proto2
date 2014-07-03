@@ -477,8 +477,12 @@ var asteroids = (function(asteroids) {
                 ctx.fill();
             }
 
-            this.accelerate = function(multiply) {
+            this.accelerate = function(multiply, computeOnly) {
                 multiply = multiply || 1; 
+
+                if(computeOnly) {
+                    var oldVelocity = this.velocity;
+                }
 
                 this.velocity = VectorMath.add(this.velocity, VectorMath.multiply(this.points.getDirection(), this.ACCELERATION * multiply));
 
@@ -491,6 +495,12 @@ var asteroids = (function(asteroids) {
 
                 if (vsize < -this.MAX_VELOCITY) {
                     this.velocity = VectorMath.multiply(VectorMath.normalize(this.velocity), -this.MAX_VELOCITY);
+                }
+
+                if(computeOnly) {
+                    var computedVelocity = this.velocity;
+                    this.velocity = oldVelocity;
+                    return computedVelocity;
                 }
             }
 
@@ -874,8 +884,12 @@ var asteroids = (function(asteroids) {
                 }
 
                 stage.onclick = function(ev) {
-                    app.world.getItem('drone1').lockedFlightTarget = [ev.clientX, ev.clientY];
+                    app.world.getItem('drone1').addFlightTarget([ev.clientX, ev.clientY]);
                     app.world.addItem(new Perk(ev.clientX, ev.clientY));
+                }
+
+                stage.ondblclick = function(ev) {
+                    app.world.getItem('drone1').currentFlightMode = 3;
                 }
 
             }
@@ -1233,6 +1247,22 @@ var asteroids = (function(asteroids) {
             return VectorMath.distance(vect1, [0, 0]);
         }
 
+        // return 1 for first is bigger, -1 for second is bigger, 0 for equality
+        asteroids.VectorMath.compareSize = function(vect1, vect2) {
+            var size1 = VectorMath.size(vect1);
+            var size2 = VectorMath.size(vect2);
+
+            if(size1 > size2) {
+                return 1;
+            }
+
+            if(size2 > size1) {
+                return -1;
+            }
+
+            return 0;
+        }
+
         asteroids.VectorMath.distance = function(vect1, vect2) {
             var a = Math.abs(vect1[0] - vect2[0]);
             var b = Math.abs(vect1[1] - vect2[1]);
@@ -1474,6 +1504,8 @@ var asteroids = (function(asteroids) {
 
             this.lockedFlightTarget = null;
 
+            var flightTargetsStack = [];
+
             this.FLIGHT_MODE = {
                 STAY_STILL: 0,
                 ROTATE_TOWARDS_POINT: 1,
@@ -1491,6 +1523,22 @@ var asteroids = (function(asteroids) {
                 
                 this.world.clock.registerLock([this.id, 'reevaluate_target'], 500);
                 this.world.clock.registerLock([this.id, 'reevaluate_flight_target'], 500);
+            }
+
+            this.estimateDecelerationPathSize = function() {
+                var pathSize = 0;
+                var speed = VectorMath.size(this.velocity);
+
+                // rotation
+                var diff = VectorMath.angleBetween(this.velocity, this.points.getDirection());
+                pathSize += speed * (( 180 - Math.abs(Angle.toDeg(diff)) ) / 5);
+
+                // deceleration
+                while(speed > 0) {
+                    pathSize += speed -= this.ACCELERATION; 
+                } 
+
+                return pathSize;
             }
 
             this.moveToFlightTarget = function() {
@@ -1521,12 +1569,10 @@ var asteroids = (function(asteroids) {
 
                         this.accelerate();
 
-                        // this.rotateTowardsPoint(this.lockedFlightTarget);
-
                         var distance = VectorMath.distance(this.points.getPoint('pivot'), this.lockedFlightTarget);
                         this.world.debugText.values['distanceToTarget'] = distance;
 
-                        if(distance < 15) {
+                        if(distance < this.estimateDecelerationPathSize()) {
                             this.currentFlightMode = this.FLIGHT_MODE.DECELERATE;
                         }
 
@@ -1534,8 +1580,33 @@ var asteroids = (function(asteroids) {
 
                     case this.FLIGHT_MODE.DECELERATE : {
 
-                        this.velocity = [0,0];
+                        if(this.__cmdRotate === undefined) {
+                            var diff = VectorMath.angleBetween(this.velocity, this.points.getDirection());
+                            Math.randomInt(0,1) ?
+                                this.rotate(- 180 + Math.abs(Angle.toDeg(diff))) :
+                                this.rotate(180 - Math.abs(Angle.toDeg(diff)));
+                            return;
+                        }
+
+                        if(!this.rotate()) {
+                            return;
+                        }
+
+                        this.world.getItem('debugText').values['drone_velocity_size'] = VectorMath.size(this.velocity);
+
+                        var nextVelocity = this.accelerate(1, true);
+                        if(VectorMath.compareSize(nextVelocity, this.velocity) === -1) {
+                            this.velocity = nextVelocity;
+                            return;
+                        }
+
+                        if(VectorMath.size(this.velocity) > 0.03) {
+                            this.__cmdRotate = undefined;
+                            return;
+                        }
+
                         this.currentFlightMode = this.FLIGHT_MODE.STAY_STILL;
+                        this.rotateReset();
                         this.lockedFlightTarget = null;
 
                     }break;
@@ -1547,21 +1618,31 @@ var asteroids = (function(asteroids) {
                     default:
                     case this.FLIGHT_MODE.STAY_STILL : {
                         
-                         if(this.lockedFlightTarget) {
+                        if(flightTargetsStack.length > 0) {
+                            this.lockedFlightTarget = flightTargetsStack.splice(0, 1)[0];
+                        }
+
+                        if(this.lockedFlightTarget) {
                             this.currentFlightMode = this.FLIGHT_MODE.ROTATE_TOWARDS_POINT;
                             return;
                         }
 
-
+                        this.holdPost();
                     }break;
                 }
 
             }
 
+            this.addFlightTarget = function(target) {
+                flightTargetsStack.push(target);
+            }
+
             this.update = function() {
-                // this.holdPost();
+                
                 this.moveToFlightTarget();
                 this.move();
+
+                this.world.getItem('debugText').values['estimateDecelerationPathSize'] = this.estimateDecelerationPathSize();
             }
 
             this.holdPost = function() {
@@ -1605,6 +1686,34 @@ var asteroids = (function(asteroids) {
                 this.points.rotate( angleBetween > 0 ? -5 : +5);
 
                 return false;
+            }
+
+            this.rotate = function(angle) {
+                if(this.__cmdRotate === '__state_done') {
+                    return true;
+                }
+
+                if(this.__cmdRotate === undefined) {
+                    this.__cmdRotate = angle;
+                }
+
+                this.points.rotate( (this.__cmdRotate > 0 ? 5 : -5) );
+                this.__cmdRotate += (this.__cmdRotate > 0 ? -5 : +5);
+
+                if(Math.abs(this.__cmdRotate) < 5) {
+                    this.__cmdRotate = '__state_done';
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            this.rotateReset = function() {
+                this.__cmdRotate = undefined;
+            }
+
+            this.turnAround = function() {
+                return this.rotate(180);
             }
 
 
