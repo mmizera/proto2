@@ -50,18 +50,19 @@ var asteroids = (function(asteroids) {
         
         var Settings                       = asteroids.Settings = function() {};
         Settings.GENERATE_ASTEROIDS        = true;
-        Settings.GENERATE_PERKS            = true;
+        Settings.GENERATE_PERKS            = false;
         Settings.SHIP_IMMORTAL             = false;
         Settings.SHIP_CANNONS_LEVEL        = 0; // starts from zero
-        Settings.SHIP_FIRE_RATE            = [100, 300];    // 0->min, 1->max in milis
+        Settings.SHIP_FIRE_RATE            = [100, 300];    // [min, max] in milis
         Settings.SHOW_FPS                  = true;
         Settings.MULTIPLAYER               = false;    // if true, second ship will be added
         Settings.ALLOW_ENDGAME             = false; // normally, game will end in case world does not contains any drawables with ship class. 
         Settings.GENERATE_ASTEROIDS_RATE   = [500, 1000];   // in milis, low and high boundary. Random ms value within these bounds is time between generation of next asteroid. 
+        Settings.PERK_LIFESPAN             = [999, 999];   // [min, max] in sec. (default [5,15])
         Settings.WORLD_MAX_ITEMS_PER_CLASS = {
-            //asteroid: 3
-            // drone : 0
-                ship : 0
+            asteroid: 0,
+            drone : 1,
+            ship : 0
         };
         
         Settings.KEY_BINDINGS_PLAYER1      = {
@@ -267,7 +268,7 @@ var asteroids = (function(asteroids) {
 
             this.type = type = type || Math.randomInt(0, Object.keys(PerkType).length - 1);
 
-            var lifespan = Math.randomInt(5, 15);
+            var lifespan = Math.randomInt(Settings.PERK_LIFESPAN[0], Settings.PERK_LIFESPAN[1]);
 
             this.world = null;
 
@@ -288,14 +289,14 @@ var asteroids = (function(asteroids) {
             });
 
             this.init = function() {
-                self.world.clock.registerLock('perk_countdown_' + this.id, 1000);
+                self.world.clock.registerLock([this.id, 'perk_countdown'], 1000);
             }
 
             this.update = function() {
                 self.points.rotate(+3);
                 self.points2.rotate(-3);
 
-                if (!self.world.clock.isLocked('perk_countdown_' + this.id)) {
+                if (!self.world.clock.isLocked([this.id, 'perk_countdown'])) {
                     --lifespan;
                 }
 
@@ -384,7 +385,7 @@ var asteroids = (function(asteroids) {
             this.init = function() {
                 this.perksManagement = new PerksManagement(this.world);
 
-                this.world.clock.registerLock(this.id + ".fire_rate_lock", MAX_FIRE_RATE);
+                this.world.clock.registerLock([this.id, 'fire_rate_lock'], MAX_FIRE_RATE);
             }
 
             this.update = function() {
@@ -414,7 +415,7 @@ var asteroids = (function(asteroids) {
             this.fire = function() {
                 var now = new Date().getTime();
 
-                if(this.world.clock.isLocked(this.id + ".fire_rate_lock")) return; // reloading or shit ...
+                if(this.world.clock.isLocked([this.id, 'fire_rate_lock'])) return; // reloading or shit ...
                 // if (now < fireActionLock) return; // reloading or shit ...
 
                 var pivot = VectorMath.add(this.points.getPoint("top"), VectorMath.multiply(this.points.getDirection(), 5));
@@ -872,6 +873,11 @@ var asteroids = (function(asteroids) {
                     self.state = GameState.END;
                 }
 
+                stage.onclick = function(ev) {
+                    app.world.getItem('drone1').lockedFlightTarget = [ev.clientX, ev.clientY];
+                    app.world.addItem(new Perk(ev.clientX, ev.clientY));
+                }
+
             }
 
             var onEnd = function() {
@@ -1310,6 +1316,19 @@ var asteroids = (function(asteroids) {
                 }
             }
 
+            this.getAngleBetween = function(pointId, targetPoint) {
+                if(!pointId || pointId === 'pivot' || !points[pointId]) {
+                    throw "Illegal pointId. PointID must be defined, must exists within points field and can not be pivot. [ pointId = '"+pointId+"']";
+                }
+
+                var targetDirection = VectorMath.normalize(VectorMath.substract(targetPoint, points.pivot));
+                var orientationBySpecifiedPoint = VectorMath.normalize(VectorMath.substract(points[pointId], points.pivot));
+
+                var angleBetween = Angle.toDeg(VectorMath.angleBetween(targetDirection, orientationBySpecifiedPoint));
+
+                return angleBetween;
+            }
+
             this.move = function(velocity) {
                 if (velocity[0] === 0 && velocity[1] === 0) return;
 
@@ -1366,6 +1385,7 @@ var asteroids = (function(asteroids) {
                 this.now = Date.now();
             }
 
+            // id can be string or array (order matters ofc)
             // duration in milis
             this.registerLock = function(id, duration) {
                 timelocks[id] = {
@@ -1452,23 +1472,95 @@ var asteroids = (function(asteroids) {
 
             this.lockedTarget = null;
 
+            this.lockedFlightTarget = null;
+
+            this.FLIGHT_MODE = {
+                STAY_STILL: 0,
+                ROTATE_TOWARDS_POINT: 1,
+                FLY_TOWARDS_POINT: 2,
+                DECELERATE: 3,
+                EVASIVE_ACTION: 4
+            };
+
+            this.currentFlightMode = this.FLIGHT_MODE.STAY_STILL;
+
             this.velocity = [0,0];
 
             this.init = function() {
                 this._init();
                 
-                this.world.clock.registerLock(this.id + ".reevaluate_target", 500);
+                this.world.clock.registerLock([this.id, 'reevaluate_target'], 500);
+                this.world.clock.registerLock([this.id, 'reevaluate_flight_target'], 500);
             }
 
-            this.moveTo = function(endpoint) {
-                //
-                //  1. rotate towards point, 2. accelerate, 2.1. compute deceleration distance, 3. start decelerating, 4. stop
-                //
+            this.moveToFlightTarget = function() {
+
+                switch(this.currentFlightMode) {
+
+                    case this.FLIGHT_MODE.ROTATE_TOWARDS_POINT : {
+
+                        if(this.rotateTowardsPoint(this.lockedFlightTarget)) {
+                            this.currentFlightMode = this.FLIGHT_MODE.FLY_TOWARDS_POINT;    
+                        }
+
+                    }break;
+
+                    case this.FLIGHT_MODE.FLY_TOWARDS_POINT : {
+                        
+                        var speed = VectorMath.size(this.velocity);
+
+                        var direction = this.points.getDirection(); // normalized directional vector
+                        var heading = VectorMath.normalize(this.velocity);
+
+                        var angleBetween = Angle.toDeg(VectorMath.angleBetween(direction, heading));
+
+                        if(!this.rotateTowardsPoint(this.lockedFlightTarget)) {
+                            this.currentFlightMode = this.FLIGHT_MODE.ROTATE_TOWARDS_POINT;  
+                            return;
+                        }
+
+                        this.accelerate();
+
+                        // this.rotateTowardsPoint(this.lockedFlightTarget);
+
+                        var distance = VectorMath.distance(this.points.getPoint('pivot'), this.lockedFlightTarget);
+                        this.world.debugText.values['distanceToTarget'] = distance;
+
+                        if(distance < 15) {
+                            this.currentFlightMode = this.FLIGHT_MODE.DECELERATE;
+                        }
+
+                    }break;
+
+                    case this.FLIGHT_MODE.DECELERATE : {
+
+                        this.velocity = [0,0];
+                        this.currentFlightMode = this.FLIGHT_MODE.STAY_STILL;
+                        this.lockedFlightTarget = null;
+
+                    }break;
+
+                    case this.FLIGHT_MODE.EVASIVE_ACTION : {
+
+                    }break;
+
+                    default:
+                    case this.FLIGHT_MODE.STAY_STILL : {
+                        
+                         if(this.lockedFlightTarget) {
+                            this.currentFlightMode = this.FLIGHT_MODE.ROTATE_TOWARDS_POINT;
+                            return;
+                        }
+
+
+                    }break;
+                }
+
             }
 
             this.update = function() {
-                this.holdPost();
-
+                // this.holdPost();
+                this.moveToFlightTarget();
                 this.move();
             }
 
@@ -1479,7 +1571,7 @@ var asteroids = (function(asteroids) {
                 }
 
                 // reevaluating your target may be usefull sometimes
-                if(!this.world.clock.isLocked(this.id + ".reevaluate_target")) {
+                if(!this.world.clock.isLocked([this.id, 'reevaluate_target'])) {
                     this.lockedTarget = null;
                 }
 
@@ -1494,21 +1586,27 @@ var asteroids = (function(asteroids) {
                     return; // nothing to do ...
                 }
 
-                
-                var targetDirection = VectorMath.normalize(VectorMath.substract(this.lockedTarget.points.getPoint('pivot'), this.points.getPoint('pivot')));
-                var droneDirection = this.points.getDirection();
-
-                var angleBetween = Angle.toDeg(VectorMath.angleBetween(targetDirection, droneDirection));
+                var angleBetween = this.points.getAngleBetween('top', this.lockedTarget.points.getPoint('pivot'));
 
                 this.points.rotate( angleBetween > 0 ? -5 : +5);
 
                 if(angleBetween < 10) { // do not shoot space itself :)
                     this.fire();
                 }
-
-                // this.world.debugText.values['Drone.lockedTarget.angleBetween'] = Math.roundTo(angleBetween, 2);
-
             }
+
+            this.rotateTowardsPoint = function(target) {
+                var angleBetween = this.points.getAngleBetween('top', target);
+
+                this.world.debugText.values['angleBetween'] = Math.roundTo(angleBetween, 2);
+
+                if(Math.abs(angleBetween) < 5) return true;
+
+                this.points.rotate( angleBetween > 0 ? -5 : +5);
+
+                return false;
+            }
+
 
             // return bool if lock was aquired.
             this.lockOnRandomTarget = function() {
